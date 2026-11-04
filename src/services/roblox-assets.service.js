@@ -13,7 +13,12 @@ const assetFormats = {
   },
   Decal: {
     '.png': 'image/png',
-    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.bmp': 'image/bmp',
+    '.tga': 'image/tga'
+  },
+  Image: {
+    '.png': 'image/png',
     '.jpeg': 'image/jpeg',
     '.bmp': 'image/bmp',
     '.tga': 'image/tga'
