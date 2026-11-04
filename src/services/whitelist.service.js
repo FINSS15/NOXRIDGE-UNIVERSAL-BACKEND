@@ -17,6 +17,21 @@ const schema = async () => {
       wl_key_hash CHAR(24) NOT NULL, trial_started_at TIMESTAMPTZ,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS noxridge_wl_entries (
+      user_id BIGINT PRIMARY KEY,
+      username VARCHAR(64) NOT NULL,
+      key_hash CHAR(24) NOT NULL,
+      trial TEXT,
+      expires TEXT,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS noxridge_wl_settings (
+      setting_key TEXT PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS noxridge_wl_asset_operations (
       user_id BIGINT NOT NULL, operation_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY(user_id, operation_id)
@@ -44,17 +59,60 @@ const wlHash = (value) => {
   }
   return [a, b >>> 0, c].map(v => v.toString(16).padStart(8, '0')).join('');
 };
+const ensureLegacyMigration = async (q) => {
+  const marker = await q.query("SELECT 1 FROM noxridge_wl_settings WHERE setting_key='legacy_json_migrated'");
+  if (marker.rows.length) return;
+  await q.query('BEGIN');
+  try {
+    await q.query("SELECT pg_advisory_xact_lock(8142031)");
+    const check = await q.query("SELECT 1 FROM noxridge_wl_settings WHERE setting_key='legacy_json_migrated'");
+    if (!check.rows.length) {
+      let legacy;
+      try {
+        const response = await fetch(`${WL_URL}?migration=${Date.now()}`, { signal: AbortSignal.timeout(8000), headers: { 'cache-control': 'no-cache' } });
+        if (!response.ok) throw new Error('legacy source unavailable');
+        legacy = await response.json();
+      } catch {
+        throw new AppError('Legacy whitelist could not be migrated. Existing WL data was not changed.', 503, 'WHITELIST_MIGRATION_UNAVAILABLE');
+      }
+      if (!Array.isArray(legacy?.whitelist)) throw new AppError('Legacy whitelist format is invalid.', 503, 'WHITELIST_INVALID');
+      for (const entry of legacy.whitelist) {
+        if (!/^\\d{1,20}$/.test(String(entry?.id ?? '')) || typeof entry?.key !== 'string' || !/^[a-f0-9]{24}$/i.test(entry.key)) continue;
+        await q.query(
+          `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires)
+           VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id) DO NOTHING`,
+          [String(entry.id), String(entry.name || 'NOXRIDGE_USER').slice(0,64), entry.key.toLowerCase(), entry.trial ? String(entry.trial) : null, entry.expires ? String(entry.expires) : null]
+        );
+      }
+      await q.query(
+        "INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('global_trial',$1::jsonb),('notice',$2::jsonb) ON CONFLICT(setting_key) DO NOTHING",
+        [JSON.stringify(legacy.global_trial || { status: 'off' }), JSON.stringify(legacy.notice || { status: 'off' })]
+      );
+      await q.query("INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('legacy_json_migrated','true'::jsonb)");
+    }
+    await q.query('COMMIT');
+  } catch (error) {
+    await q.query('ROLLBACK').catch(() => {});
+    throw error;
+  }
+};
 const getWhitelist = async () => {
-  if (cache && Date.now() - cache.at < 30000) return cache.data;
-  let response;
-  try { response = await fetch(`${WL_URL}?t=${Date.now()}`, { signal: AbortSignal.timeout(8000), headers: { 'cache-control': 'no-cache' } }); }
-  catch { throw new AppError('NOXRIDGE whitelist is temporarily unavailable.', 503, 'WHITELIST_UNAVAILABLE'); }
-  if (!response.ok) throw new AppError('NOXRIDGE whitelist is temporarily unavailable.', 503, 'WHITELIST_UNAVAILABLE');
-  let data;
-  try { data = await response.json(); } catch { throw new AppError('NOXRIDGE whitelist response is invalid.', 503, 'WHITELIST_INVALID'); }
-  if (!Array.isArray(data?.whitelist)) throw new AppError('NOXRIDGE whitelist format is invalid.', 503, 'WHITELIST_INVALID');
-  cache = { at: Date.now(), data };
-  return data;
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  const [users, settings] = await Promise.all([
+    q.query("SELECT user_id,username,key_hash,trial,expires FROM noxridge_wl_entries WHERE active=TRUE ORDER BY user_id"),
+    q.query("SELECT setting_key,value FROM noxridge_wl_settings WHERE setting_key IN ('global_trial','notice')")
+  ]);
+  const config = Object.fromEntries(settings.rows.map(row => [row.setting_key, row.value]));
+  return {
+    whitelist: users.rows.map(row => ({
+      id: String(row.user_id), name: row.username, key: row.key_hash,
+      ...(row.trial ? { trial: row.trial } : {}),
+      ...(row.expires ? { expires: row.expires } : {})
+    })),
+    global_trial: config.global_trial || { status: 'off' },
+    notice: config.notice || { status: 'off' }
+  };
 };
 const duration = (value) => {
   if (typeof value === 'number') return value > 0 ? value : null;
@@ -143,4 +201,66 @@ export const recordWhitelistStorageObject = async ({ userId, key, filename, cate
   const r = await q.query(`INSERT INTO noxridge_wl_storage_objects(user_id,object_key,filename,category,content_type,size_bytes)
     VALUES($1,$2,$3,$4,$5,$6) RETURNING id,filename,category,content_type,size_bytes,created_at`, [userId, key, filename, category, contentType, size]);
   return r.rows[0];
+};
+
+
+// Central whitelist administration. Raw generated keys are returned only once.
+export const listWhitelistAdmin = async () => {
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  const [users, settings] = await Promise.all([
+    q.query("SELECT user_id,username,trial,expires,active,created_at,updated_at FROM noxridge_wl_entries ORDER BY user_id"),
+    q.query("SELECT setting_key,value FROM noxridge_wl_settings WHERE setting_key IN ('global_trial','notice')")
+  ]);
+  return {
+    users: users.rows.map(row => ({
+      userId: String(row.user_id), username: row.username, trial: row.trial,
+      expires: row.expires, active: row.active, createdAt: row.created_at, updatedAt: row.updated_at
+    })),
+    config: Object.fromEntries(settings.rows.map(row => [row.setting_key, row.value]))
+  };
+};
+export const addWhitelistUser = async ({ userId, username, trial, expires }) => {
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
+  const rawKey = randomBytes(18).toString('hex');
+  const keyHash = wlHash(rawKey).toLowerCase();
+  await q.query(
+    `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires,active)
+     VALUES($1,$2,$3,$4,$5,TRUE)
+     ON CONFLICT(user_id) DO UPDATE SET username=EXCLUDED.username,key_hash=EXCLUDED.key_hash,
+       trial=EXCLUDED.trial,expires=EXCLUDED.expires,active=TRUE,updated_at=NOW()`,
+    [String(userId), String(username).trim().slice(0,64) || 'NOXRIDGE_USER', keyHash, trial || null, expires || null]
+  );
+  cache = undefined;
+  return { userId: String(userId), username: String(username).trim().slice(0,64) || 'NOXRIDGE_USER', wlKey: rawKey };
+};
+export const removeWhitelistUser = async (userId) => {
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  const result = await q.query("UPDATE noxridge_wl_entries SET active=FALSE,updated_at=NOW() WHERE user_id=$1 RETURNING user_id", [String(userId)]);
+  if (!result.rows[0]) throw new AppError('Whitelist user was not found.', 404, 'WL_USER_NOT_FOUND');
+  cache = undefined;
+  return { userId: String(userId), revoked: true };
+};
+export const updateWhitelistConfig = async ({ globalTrial, notice }) => {
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  if (globalTrial !== undefined) await q.query(
+    "INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('global_trial',$1::jsonb) ON CONFLICT(setting_key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()",
+    [JSON.stringify(globalTrial)]
+  );
+  if (notice !== undefined) await q.query(
+    "INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('notice',$1::jsonb) ON CONFLICT(setting_key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()",
+    [JSON.stringify(notice)]
+  );
+  cache = undefined;
+  return (await getWhitelist()).notice && (await getWhitelist()).global_trial
+    ? { global_trial: (await getWhitelist()).global_trial, notice: (await getWhitelist()).notice }
+    : {};
+};
+export const getWhitelistPublicConfig = async () => {
+  const data = await getWhitelist();
+  return { global_trial: data.global_trial, notice: data.notice };
 };
