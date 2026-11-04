@@ -1,3 +1,4 @@
+import { env } from '../config/env.js';
 import { AppError } from '../utils/errors.js';
 
 const REQUEST_TIMEOUT = 60_000;
@@ -8,7 +9,7 @@ const getAIConfig = () => {
     AI_API_KEY,
     AI_BASE_URL,
     AI_MODEL
-  } = process.env;
+  } = env;
 
   if (!AI_API_KEY || !AI_BASE_URL || !AI_MODEL) {
     throw new AppError(
@@ -18,17 +19,7 @@ const getAIConfig = () => {
     );
   }
 
-  let baseUrl;
-
-  try {
-    baseUrl = new URL(AI_BASE_URL);
-  } catch {
-    throw new AppError(
-      'AI provider URL is invalid.',
-      500,
-      'AI_CONFIGURATION_ERROR'
-    );
-  }
+  const baseUrl = new URL(AI_BASE_URL);
 
   if (
     baseUrl.protocol !== 'https:' &&
@@ -107,7 +98,6 @@ export const sendAIMessage = async ({
   });
 
   const config = getAIConfig();
-
   const controller = new AbortController();
 
   const timeout = setTimeout(
@@ -120,18 +110,15 @@ export const sendAIMessage = async ({
       `${config.baseUrl}/chat/completions`,
       {
         method: 'POST',
-
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${config.apiKey}`
         },
-
         body: JSON.stringify({
           model: config.model,
           messages,
           temperature: 0.7
         }),
-
         signal: controller.signal
       }
     );
@@ -149,7 +136,6 @@ export const sendAIMessage = async ({
     }
 
     const data = await response.json();
-
     const answer = data?.choices?.[0]?.message?.content;
 
     if (typeof answer !== 'string' || !answer.trim()) {
