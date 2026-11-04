@@ -13,29 +13,26 @@ import storageRoutes from './routes/storage.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 
-import {
-  apiRateLimiter,
-  aiRateLimiter,
-  uploadRateLimiter
-} from './middleware/rateLimit.js';
-
+import { apiRateLimiter, aiRateLimiter, uploadRateLimiter } from './middleware/rateLimit.js';
 import notFound from './middleware/notFound.js';
 import errorHandler from './middleware/errorHandler.js';
 
 const app = express();
-
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(helmet());
 
 const allowedOrigins = env.CORS_ORIGIN
-  ? env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean)
+  ? env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
   : false;
 
 app.use(cors({
   origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-master-key', 'x-roblox-open-cloud-key']
+  allowedHeaders: [
+    'Content-Type', 'Authorization', 'x-api-key', 'x-master-key',
+    'x-roblox-open-cloud-key', 'x-noxridge-user-id', 'x-noxridge-wl-key'
+  ]
 }));
 
 app.use(express.json({ limit: '1mb' }));
@@ -60,5 +57,4 @@ app.use('/upload', uploadRateLimiter, uploadRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
-
 export default app;
