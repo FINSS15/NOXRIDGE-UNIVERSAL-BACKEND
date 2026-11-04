@@ -7,9 +7,9 @@ const router = Router();
 
 router.get('/status', (req, res) => {
   const aiConfigured = Boolean(
-    process.env.AI_API_KEY &&
-    process.env.AI_BASE_URL &&
-    process.env.AI_MODEL
+    env.AI_API_KEY &&
+    env.AI_BASE_URL &&
+    env.AI_MODEL
   );
 
   return res.status(200).json({
