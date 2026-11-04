@@ -356,3 +356,25 @@ Authorization: Bearer ACCOUNT_TOKEN
 The Roblox Open Cloud key is selected from the authenticated account only: permanent accounts use their encrypted saved key; trial accounts must provide x-roblox-open-cloud-key on each request. Operation IDs are recorded against the account that created them, and status checks are restricted to that account.
 
 Roblox's documented endpoints are POST https://apis.roblox.com/assets/v1/assets and GET https://apis.roblox.com/assets/v1/operations/{operationId}. Supported Image/Decal formats are PNG, JPEG, BMP, and TGA; Audio formats are MP3, OGG, WAV, and FLAC. Roblox's published content-upload limit is 20 MB per file; audio duration and monthly quota restrictions also apply.
+
+
+17. Bypass Music (Owned Audio Processing)
+
+POST /assets/bypass-music
+Authorization: Bearer ACCOUNT_TOKEN
+Content-Type: multipart/form-data
+
+Fields:
+- file: source audio file owned by the user or authorized for use
+- displayName: resulting Roblox audio name (1-50 characters)
+- description: optional description
+- creatorType: user or group
+- creatorId: numeric Roblox user ID or group ID
+- mode: speed or slow
+- speed: 1.0-2.0 for speed mode, 0.5-1.0 for slow mode
+- pitch: integer semitones from -12 to 12
+- volume: 0.0-1.0
+
+The backend applies the requested audio effects, exports an MP3, stores a private copy under the authenticated account's B2 prefix, then submits the processed file to Roblox as an Audio asset using that account's Open Cloud key. The Roblox operation ID is account-bound and can be checked with GET /assets/operations/:operationId.
+
+The source must be uploaded as a file. This endpoint does not download, extract, or alter audio from a Roblox asset ID and is not a moderation, rights, or upload-quota bypass. Users must have the rights and permissions to upload the source audio. The processed MP3 must remain within Roblox's 20 MB limit.
