@@ -11,7 +11,7 @@ const db = () => {
   return pool;
 };
 const schema = async () => {
-  if (!schemaPromise) schemaPromise = db().query(\`
+  if (!schemaPromise) schemaPromise = db().query(`
     CREATE TABLE IF NOT EXISTS noxridge_wl_users (
       user_id BIGINT PRIMARY KEY, encrypted_key TEXT, iv TEXT, auth_tag TEXT,
       wl_key_hash CHAR(24) NOT NULL, trial_started_at TIMESTAMPTZ,
@@ -26,13 +26,13 @@ const schema = async () => {
       filename VARCHAR(255) NOT NULL, category VARCHAR(16) NOT NULL CHECK(category IN ('image','music')),
       content_type VARCHAR(128) NOT NULL, size_bytes BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-  \`);
+  `);
   try { await schemaPromise; } catch (error) { schemaPromise = undefined; throw error; }
   return db();
 };
 const rotl = (v, n) => ((v << n) | (v >>> (32 - n))) >>> 0;
 const wlHash = (value) => {
-  const s = \`NXR|\${String(value)}|\${String(value).length}\`;
+  const s = `NXR|${String(value)}|${String(value).length}`;
   let a = 2166136261 >>> 0, b = 5381 >>> 0, c = 2654435769 >>> 0;
   for (let i = 1; i <= s.length; i++) {
     const x = s.charCodeAt(i - 1);
@@ -47,7 +47,7 @@ const wlHash = (value) => {
 const getWhitelist = async () => {
   if (cache && Date.now() - cache.at < 30000) return cache.data;
   let response;
-  try { response = await fetch(\`\${WL_URL}?t=\${Date.now()}\`, { signal: AbortSignal.timeout(8000), headers: { 'cache-control': 'no-cache' } }); }
+  try { response = await fetch(`${WL_URL}?t=${Date.now()}`, { signal: AbortSignal.timeout(8000), headers: { 'cache-control': 'no-cache' } }); }
   catch { throw new AppError('NOXRIDGE whitelist is temporarily unavailable.', 503, 'WHITELIST_UNAVAILABLE'); }
   if (!response.ok) throw new AppError('NOXRIDGE whitelist is temporarily unavailable.', 503, 'WHITELIST_UNAVAILABLE');
   let data;
@@ -86,8 +86,8 @@ export const authenticateWhitelist = async (idInput, rawKey) => {
     if (!seconds) throw new AppError('Whitelist trial duration is invalid.', 403, 'WL_TRIAL_INVALID');
     if (!started) {
       started = new Date();
-      await q.query(\`INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at) VALUES($1,$2,$3)
-        ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,trial_started_at=COALESCE(noxridge_wl_users.trial_started_at,EXCLUDED.trial_started_at)\`, [userId, entry.key, started]);
+      await q.query(`INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at) VALUES($1,$2,$3)
+        ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,trial_started_at=COALESCE(noxridge_wl_users.trial_started_at,EXCLUDED.trial_started_at)`, [userId, entry.key, started]);
     }
     if (Date.now() >= new Date(started).getTime() + seconds * 1000) throw new AppError('NOXRIDGE WL trial has expired.', 403, 'WL_TRIAL_EXPIRED');
   }
@@ -95,8 +95,8 @@ export const authenticateWhitelist = async (idInput, rawKey) => {
     const exp = expiryWib(entry.expires);
     if (!exp || Date.now() >= exp.getTime()) throw new AppError('NOXRIDGE WL access has expired.', 403, 'WL_ACCESS_EXPIRED');
   }
-  await q.query(\`INSERT INTO noxridge_wl_users(user_id,wl_key_hash) VALUES($1,$2)
-    ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,updated_at=NOW()\`, [userId, entry.key]);
+  await q.query(`INSERT INTO noxridge_wl_users(user_id,wl_key_hash) VALUES($1,$2)
+    ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,updated_at=NOW()`, [userId, entry.key]);
   return { userId, username: String(entry.name || ''), plan: entry.trial ? 'trial' : 'whitelist' };
 };
 const encrypt = (plain) => {
@@ -140,7 +140,7 @@ export const assertWhitelistAssetOperationOwner = async (id, operationId) => {
 };
 export const recordWhitelistStorageObject = async ({ userId, key, filename, category, contentType, size }) => {
   const q = await schema();
-  const r = await q.query(\`INSERT INTO noxridge_wl_storage_objects(user_id,object_key,filename,category,content_type,size_bytes)
-    VALUES($1,$2,$3,$4,$5,$6) RETURNING id,filename,category,content_type,size_bytes,created_at\`, [userId, key, filename, category, contentType, size]);
+  const r = await q.query(`INSERT INTO noxridge_wl_storage_objects(user_id,object_key,filename,category,content_type,size_bytes)
+    VALUES($1,$2,$3,$4,$5,$6) RETURNING id,filename,category,content_type,size_bytes,created_at`, [userId, key, filename, category, contentType, size]);
   return r.rows[0];
 };
