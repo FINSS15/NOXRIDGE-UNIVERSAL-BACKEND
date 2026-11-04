@@ -60,8 +60,6 @@ const wlHash = (value) => {
   return [a, b >>> 0, c].map(v => v.toString(16).padStart(8, '0')).join('');
 };
 const ensureLegacyMigration = async (q) => {
-  const marker = await client.query("SELECT 1 FROM noxridge_wl_settings WHERE setting_key='legacy_json_migrated'");
-  if (marker.rows.length) return;
   const client = await q.connect();
   await client.query('BEGIN');
   try {
@@ -78,7 +76,7 @@ const ensureLegacyMigration = async (q) => {
       }
       if (!Array.isArray(legacy?.whitelist)) throw new AppError('Legacy whitelist format is invalid.', 503, 'WHITELIST_INVALID');
       for (const entry of legacy.whitelist) {
-        if (!/^\\d{1,20}$/.test(String(entry?.id ?? '')) || typeof entry?.key !== 'string' || !/^[a-f0-9]{24}$/i.test(entry.key)) continue;
+        if (!/^\d{1,20}$/.test(String(entry?.id ?? '')) || typeof entry?.key !== 'string' || !/^[a-f0-9]{24}$/i.test(entry.key)) continue;
         await client.query(
           `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires)
            VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id) DO NOTHING`,
@@ -224,7 +222,7 @@ export const listWhitelistAdmin = async () => {
 export const addWhitelistUser = async ({ userId, username, trial, expires }) => {
   const q = await schema();
   await ensureLegacyMigration(q);
-  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
   const rawKey = randomBytes(18).toString('hex');
   const keyHash = wlHash(rawKey).toLowerCase();
   await q.query(
