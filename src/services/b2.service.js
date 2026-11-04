@@ -1,5 +1,6 @@
 import {
   PutObjectCommand,
+  GetObjectCommand,
   DeleteObjectCommand,
   HeadBucketCommand
 } from '@aws-sdk/client-s3';
@@ -10,7 +11,8 @@ import {
   isB2Ready
 } from '../config/b2.js';
 
-import { AppError } from '../utils/errors.js';\nimport { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { AppError } from '../utils/errors.js';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const ensureB2Ready = () => {
   if (!isB2Ready || !b2Client || !B2_BUCKET) {
