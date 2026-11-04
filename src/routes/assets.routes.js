@@ -67,13 +67,22 @@ router.post('/upload', requireWhitelist, uploadSingleFile, async (req, res, next
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Asset metadata is invalid.', 400, 'VALIDATION_ERROR');
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
+    let privateStorage = null;
+    if (parsed.data.assetType === 'Image' || parsed.data.assetType === 'Audio') {
+      const category = parsed.data.assetType === 'Image' ? 'image' : 'music';
+      const privateCopy = await processUpload(req.file, category, req.noxridge.userId);
+      privateStorage = await recordWhitelistStorageObject({
+        userId: req.noxridge.userId, key: privateCopy.key, filename: privateCopy.filename,
+        category, contentType: privateCopy.contentType, size: privateCopy.size
+      });
+    }
     const result = await createRobloxAsset({ apiKey, file: req.file, ...parsed.data });
     const operationId = result?.path?.split('/').pop() || result?.operationId;
     if (operationId) await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
     return res.status(202).json({
       success: true,
-      message: 'Asset upload accepted by Roblox. Check operation status for the asset ID.',
-      data: result,
+      message: 'Asset submitted to Roblox and private copy stored for this WL player when applicable.',
+      data: { ...result, privateStorage },
       timestamp: new Date().toISOString()
     });
   } catch (error) { return next(error); }
