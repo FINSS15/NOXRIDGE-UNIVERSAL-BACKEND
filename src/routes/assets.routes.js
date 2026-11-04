@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAccount } from '../middleware/accountAuth.js';
 import { uploadSingleFile } from '../middleware/upload.js';
-import { resolveAccountOpenCloudKey, saveAssetOperation, assertAssetOperationOwner } from '../services/account.service.js';
+import { resolveAccountOpenCloudKey, saveAssetOperation, assertAssetOperationOwner, recordStorageObject } from '../services/account.service.js';
 import {
   createRobloxAsset,
   getRobloxAssetOperation
@@ -10,8 +10,6 @@ import {
 import { AppError } from '../utils/errors.js';
 import { transformAudio } from '../services/audio-transform.service.js';
 import { processUpload } from '../services/upload.service.js';
-import { recordStorageObject } from '../services/account.service.js';
-import { deleteObject } from '../services/b2.service.js';
 
 const router = Router();
 
@@ -70,7 +68,6 @@ const bypassMusicSchema = z.object({
 // Music processing accepts a source audio FILE owned/authorized by the caller.
 // It does not download or alter another Roblox user's audio by ID.
 router.post('/bypass-music', requireAccount, uploadSingleFile, async (req, res, next) => {
-  let storedKey;
   try {
     if (!req.file) throw new AppError('Choose an audio source file you own or are authorized to use.', 400, 'AUDIO_FILE_REQUIRED');
     const parsed = bypassMusicSchema.safeParse(req.body);
@@ -97,7 +94,6 @@ router.post('/bypass-music', requireAccount, uploadSingleFile, async (req, res, 
       originalname: `${safeBaseName}.mp3`,
       mimetype: 'audio/mpeg'
     }, 'music', req.account.id);
-    storedKey = privateCopy.key;
 
     const privateRecord = await recordStorageObject({
       accountId: req.account.id,
