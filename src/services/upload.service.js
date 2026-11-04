@@ -194,7 +194,13 @@ export const processUpload = async (file, category, ownerId = null) => {
     extension
   );
 
-  if (['image', 'music'].includes(category) && !ownerId) {\n    throw new AppError('An authenticated account is required for personal image/music storage.', 401, 'ACCOUNT_REQUIRED');\n  }\n\n  const objectKey = ownerId\n    ? `users/${ownerId}/${category}/${randomUUID()}${extension}`\n    : `${category}/${randomUUID()}${extension}`;
+  if (['image', 'music'].includes(category) && !ownerId) {
+    throw new AppError('An authenticated account is required for personal image/music storage.', 401, 'ACCOUNT_REQUIRED');
+  }
+
+  const objectKey = ownerId
+    ? `users/${ownerId}/${category}/${randomUUID()}${extension}`
+    : `${category}/${randomUUID()}${extension}`;
 
   const storedFile = await uploadObject({
     key: objectKey,
