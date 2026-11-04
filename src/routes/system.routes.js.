@@ -1,0 +1,57 @@
+import { Router } from 'express';
+
+import { env } from '../config/env.js';
+import { isB2Ready } from '../config/b2.js';
+
+const router = Router();
+
+router.get('/status', (req, res) => {
+  const aiConfigured = Boolean(
+    process.env.AI_API_KEY &&
+    process.env.AI_BASE_URL &&
+    process.env.AI_MODEL
+  );
+
+  return res.status(200).json({
+    success: true,
+
+    service: 'NOXRIDGE UNIVERSAL BACKEND',
+
+    organization: 'NOXRIDGE COMMUNITY',
+
+    status: 'operational',
+
+    environment: env.NODE_ENV,
+
+    runtime: {
+      node: process.version,
+      uptime: Math.floor(process.uptime())
+    },
+
+    services: {
+      api: {
+        status: 'running'
+      },
+
+      authentication: {
+        apiKeyConfigured: Boolean(env.API_KEY),
+        masterKeyConfigured: Boolean(env.MASTER_KEY)
+      },
+
+      storage: {
+        provider: 'Backblaze B2',
+        configured: isB2Ready,
+        connection: 'not_checked'
+      },
+
+      ai: {
+        configured: aiConfigured,
+        connection: 'not_checked'
+      }
+    },
+
+    timestamp: new Date().toISOString()
+  });
+});
+
+export default router;
