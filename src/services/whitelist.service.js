@@ -154,7 +154,17 @@ export const authenticateWhitelist = async (idInput, rawKey) => {
   }
   await q.query(`INSERT INTO noxridge_wl_users(user_id,wl_key_hash) VALUES($1,$2)
     ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,updated_at=NOW()`, [userId, entry.key]);
-  return { userId, username: String(entry.name || ''), plan: entry.trial ? 'trial' : 'whitelist' };
+  let expiresAt = null;
+  if (entry.trial && started) {
+    const seconds = duration(entry.trial);
+    if (seconds) expiresAt = Math.floor((new Date(started).getTime() + seconds * 1000) / 1000);
+  }
+  if (entry.expires) {
+    const absolute = expiryWib(entry.expires);
+    const absoluteSeconds = absolute ? Math.floor(absolute.getTime() / 1000) : null;
+    if (absoluteSeconds && (!expiresAt || absoluteSeconds < expiresAt)) expiresAt = absoluteSeconds;
+  }
+  return { userId, username: String(entry.name || ''), plan: entry.trial ? 'trial' : 'whitelist', expiresAt };
 };
 const encrypt = (plain) => {
   if (!env.KEY_ENCRYPTION_SECRET) throw new AppError('Key vault is not configured. Set KEY_ENCRYPTION_SECRET.', 503, 'KEY_VAULT_NOT_CONFIGURED');
