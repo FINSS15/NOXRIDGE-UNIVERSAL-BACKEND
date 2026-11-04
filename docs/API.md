@@ -285,3 +285,34 @@ Security notes:
 - Session tokens are stored as SHA-256 hashes and expire after 30 days.
 - Saved Open Cloud keys are encrypted at rest. Rotating KEY_ENCRYPTION_SECRET without re-encrypting stored keys makes existing saved keys unreadable.
 - Account registration currently creates trial accounts; promotion is controlled by the master-key endpoint.
+
+
+14. Roblox Open Cloud Asset Upload
+
+POST /assets/upload
+Authorization: Bearer ACCOUNT_TOKEN
+Content-Type: multipart/form-data
+
+Form fields:
+- file: binary asset file
+- assetType: Model, Decal, Audio, or Animation
+- displayName: asset display name (1-50 characters)
+- description: optional description (up to 1000 characters)
+- creatorType: user or group
+- creatorId: numeric Roblox user ID or group ID
+
+Permanent accounts use the encrypted saved key. Trial accounts must include x-roblox-open-cloud-key on every request; the trial key is not persisted.
+
+Supported formats:
+- Model: .fbx, .gltf, .glb, .rbxm, .rbxmx
+- Decal: .png, .jpg, .jpeg, .bmp, .tga
+- Audio: .mp3, .ogg, .wav, .flac
+- Animation: .rbxm, .rbxmx
+
+Maximum file size: 20 MB per request. Roblox may enforce additional asset-type quotas, moderation, creator ownership, and key permission rules.
+
+GET /assets/operations/:operationId
+Authorization: Bearer ACCOUNT_TOKEN
+Returns the Roblox operation status and, when processing completes, the asset ID.
+
+The Open Cloud key must have asset write permissions and access to the intended creator/resource. Roblox documents this API as beta. The backend does not receive or store the key in plaintext for permanent accounts.
