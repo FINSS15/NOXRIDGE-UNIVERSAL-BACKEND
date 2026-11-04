@@ -60,7 +60,7 @@ export const createRobloxAsset = async ({
   creatorId
 }) => {
   if (!file?.buffer) throw new AppError('Upload file is required.', 400, 'FILE_REQUIRED');
-  if (file.size > MAX_ASSET_BYTES) {
+  if (file.buffer.length > MAX_ASSET_BYTES) {
     throw new AppError('Roblox Open Cloud asset uploads are limited to 20 MB per file.', 413, 'ASSET_TOO_LARGE');
   }
   const formats = assetFormats[assetType];
