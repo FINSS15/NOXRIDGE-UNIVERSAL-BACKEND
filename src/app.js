@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -10,9 +11,11 @@ import authRoutes from './routes/auth.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 
-import { apiRateLimiter } from './middleware/rateLimit.js';
-import { aiRateLimiter } from './middleware/rateLimit.js';
-import { uploadRateLimiter } from './middleware/rateLimit.js';
+import {
+  apiRateLimiter,
+  aiRateLimiter,
+  uploadRateLimiter
+} from './middleware/rateLimit.js';
 
 import notFound from './middleware/notFound.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -26,7 +29,7 @@ app.set('trust proxy', 1);
 // Security headers
 app.use(helmet());
 
-// CORS
+// CORS configuration
 const allowedOrigins = env.CORS_ORIGIN
   ? env.CORS_ORIGIN
       .split(',')
@@ -69,15 +72,11 @@ app.get('/', (req, res) => {
 // Health check
 app.use('/', healthRoutes);
 
-// General API rate limit
-app.use('/system', apiRateLimiter);
-app.use('/auth', apiRateLimiter);
-
 // System status
-app.use('/system', systemRoutes);
+app.use('/system', apiRateLimiter, systemRoutes);
 
 // Authentication
-app.use('/auth', authRoutes);
+app.use('/auth', apiRateLimiter, authRoutes);
 
 // AI Chat
 app.use('/ai', aiRateLimiter, aiRoutes);
