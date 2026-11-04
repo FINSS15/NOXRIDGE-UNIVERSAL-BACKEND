@@ -29,7 +29,7 @@ router.get('/admin', requireMasterKey, async (req, res, next) => {
 router.post('/admin/users', requireMasterKey, async (req, res, next) => {
   try {
     const parsed = z.object({
-      userId: z.string().regex(/^\\d{1,20}$/),
+      userId: z.string().regex(/^\d{1,20}$/),
       username: z.string().trim().min(1).max(64),
       trial: z.string().trim().max(32).optional().nullable(),
       expires: z.string().trim().max(40).optional().nullable()
@@ -46,7 +46,7 @@ router.post('/admin/users', requireMasterKey, async (req, res, next) => {
 
 router.delete('/admin/users/:userId', requireMasterKey, async (req, res, next) => {
   try {
-    if (!/^\\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
+    if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
     return res.json({ success: true, data: await removeWhitelistUser(req.params.userId) });
   } catch (error) { return next(error); }
 });
