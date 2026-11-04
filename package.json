@@ -1,0 +1,30 @@
+{
+  "name": "noxridge-universal-backend",
+  "version": "1.0.0",
+  "description": "NOXRIDGE COMMUNITY - Universal Backend API",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "check": "node --check server.js && node --check src/app.js && node --check src/config/env.js && node --check src/config/b2.js && node --check src/middleware/auth.js && node --check src/middleware/errorHandler.js && node --check src/middleware/notFound.js && node --check src/middleware/rateLimit.js && node --check src/middleware/upload.js && node --check src/routes/health.routes.js && node --check src/routes/system.routes.js && node --check src/routes/auth.routes.js && node --check src/routes/ai.routes.js && node --check src/routes/upload.routes.js && node --check src/services/ai.service.js && node --check src/services/b2.service.js && node --check src/services/upload.service.js && node --check src/utils/errors.js && node --check src/utils/validators.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.850.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "file-type": "^21.0.0",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
