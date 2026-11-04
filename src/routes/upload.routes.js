@@ -1,32 +1,28 @@
 import { Router } from 'express';
-import { requireAccount } from '../middleware/accountAuth.js';
+
+import { requireApiKey } from '../middleware/auth.js';
 import { uploadSingleFile } from '../middleware/upload.js';
 import { processUpload } from '../services/upload.service.js';
-import { recordStorageObject } from '../services/account.service.js';
 import { AppError } from '../utils/errors.js';
 
 const router = Router();
 
-router.post('/', requireAccount, uploadSingleFile, async (req, res, next) => {
+router.post('/', requireApiKey, uploadSingleFile, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('No file was provided.', 400, 'FILE_REQUIRED');
     const category = req.body.category;
-    if (!['image', 'music'].includes(category)) {
-      throw new AppError('This personal endpoint accepts image or music only.', 400, 'INVALID_UPLOAD_CATEGORY');
+    if (!['file', 'rbxm', 'rbxl'].includes(category)) {
+      throw new AppError(
+        'Image and music must use the authenticated personal /storage/upload endpoint. General upload accepts file, rbxm, or rbxl.',
+        400,
+        'USE_PERSONAL_STORAGE'
+      );
     }
-    const result = await processUpload(req.file, category, req.account.id);
-    const record = await recordStorageObject({
-      accountId: req.account.id,
-      key: result.key,
-      filename: result.filename,
-      category,
-      contentType: result.contentType,
-      size: result.size
-    });
+    const result = await processUpload(req.file, category);
     return res.status(201).json({
       success: true,
-      message: 'File uploaded to your private NOXRIDGE storage.',
-      data: { ...record, storage: 'backblaze-b2' },
+      message: 'General file uploaded successfully.',
+      data: result,
       timestamp: new Date().toISOString()
     });
   } catch (error) { return next(error); }
