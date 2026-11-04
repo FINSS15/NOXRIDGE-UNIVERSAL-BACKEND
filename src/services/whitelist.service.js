@@ -60,12 +60,13 @@ const wlHash = (value) => {
   return [a, b >>> 0, c].map(v => v.toString(16).padStart(8, '0')).join('');
 };
 const ensureLegacyMigration = async (q) => {
-  const marker = await q.query("SELECT 1 FROM noxridge_wl_settings WHERE setting_key='legacy_json_migrated'");
+  const marker = await client.query("SELECT 1 FROM noxridge_wl_settings WHERE setting_key='legacy_json_migrated'");
   if (marker.rows.length) return;
-  await q.query('BEGIN');
+  const client = await q.connect();
+  await client.query('BEGIN');
   try {
-    await q.query("SELECT pg_advisory_xact_lock(8142031)");
-    const check = await q.query("SELECT 1 FROM noxridge_wl_settings WHERE setting_key='legacy_json_migrated'");
+    await client.query("SELECT pg_advisory_xact_lock(8142031)");
+    const check = await client.query("SELECT 1 FROM noxridge_wl_settings WHERE setting_key='legacy_json_migrated'");
     if (!check.rows.length) {
       let legacy;
       try {
@@ -78,23 +79,23 @@ const ensureLegacyMigration = async (q) => {
       if (!Array.isArray(legacy?.whitelist)) throw new AppError('Legacy whitelist format is invalid.', 503, 'WHITELIST_INVALID');
       for (const entry of legacy.whitelist) {
         if (!/^\\d{1,20}$/.test(String(entry?.id ?? '')) || typeof entry?.key !== 'string' || !/^[a-f0-9]{24}$/i.test(entry.key)) continue;
-        await q.query(
+        await client.query(
           `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires)
            VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id) DO NOTHING`,
           [String(entry.id), String(entry.name || 'NOXRIDGE_USER').slice(0,64), entry.key.toLowerCase(), entry.trial ? String(entry.trial) : null, entry.expires ? String(entry.expires) : null]
         );
       }
-      await q.query(
+      await client.query(
         "INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('global_trial',$1::jsonb),('notice',$2::jsonb) ON CONFLICT(setting_key) DO NOTHING",
         [JSON.stringify(legacy.global_trial || { status: 'off' }), JSON.stringify(legacy.notice || { status: 'off' })]
       );
-      await q.query("INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('legacy_json_migrated','true'::jsonb)");
+      await client.query("INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('legacy_json_migrated','true'::jsonb)");
     }
-    await q.query('COMMIT');
+    await client.query('COMMIT');
   } catch (error) {
-    await q.query('ROLLBACK').catch(() => {});
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
-  }
+  } finally { client.release(); }
 };
 const getWhitelist = async () => {
   const q = await schema();
@@ -255,10 +256,8 @@ export const updateWhitelistConfig = async ({ globalTrial, notice }) => {
     "INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('notice',$1::jsonb) ON CONFLICT(setting_key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()",
     [JSON.stringify(notice)]
   );
-  cache = undefined;
-  return (await getWhitelist()).notice && (await getWhitelist()).global_trial
-    ? { global_trial: (await getWhitelist()).global_trial, notice: (await getWhitelist()).notice }
-    : {};
+  const data = await getWhitelist();
+  return { global_trial: data.global_trial, notice: data.notice };
 };
 export const getWhitelistPublicConfig = async () => {
   const data = await getWhitelist();
