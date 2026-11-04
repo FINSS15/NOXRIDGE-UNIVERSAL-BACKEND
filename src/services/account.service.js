@@ -228,3 +228,30 @@ export const accountDatabaseReady = async () => {
   await db.query('SELECT 1');
   return true;
 };
+
+export const resolveAccountOpenCloudKey = async (accountId, transientKey) => {
+  const db = await ensureSchema();
+  const result = await db.query(
+    'SELECT a.plan,a.trial_expires_at,k.encrypted_key,k.iv,k.auth_tag FROM noxridge_accounts a LEFT JOIN noxridge_opencloud_keys k ON k.account_id=a.id WHERE a.id=$1',
+    [accountId]
+  );
+  const account = result.rows[0];
+  if (!account) throw new AppError('Account not found.', 404, 'ACCOUNT_NOT_FOUND');
+  if (account.plan === 'trial') {
+    if (new Date(account.trial_expires_at) <= new Date()) {
+      throw new AppError('Your trial has expired.', 403, 'TRIAL_EXPIRED');
+    }
+    if (!transientKey) {
+      throw new AppError('Trial accounts must send x-roblox-open-cloud-key for each Roblox asset operation.', 400, 'ROBLOX_KEY_REQUIRED');
+    }
+    return transientKey;
+  }
+  if (!account.encrypted_key) {
+    throw new AppError('Save your Roblox Open Cloud key in your account first.', 400, 'ROBLOX_KEY_NOT_SAVED');
+  }
+  return decryptStoredOpenCloudKey({
+    encrypted_key: account.encrypted_key,
+    iv: account.iv,
+    auth_tag: account.auth_tag
+  });
+};
