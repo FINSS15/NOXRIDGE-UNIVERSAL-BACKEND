@@ -13,6 +13,13 @@ import { AppError } from '../utils/errors.js';
 
 const router = Router();
 
+router.get('/config', async (req, res, next) => {
+  try {
+    const config = await getWhitelistPublicConfig();
+    return res.json({ success: true, config });
+  } catch (error) { return next(error); }
+});
+
 router.get('/verify', requireWhitelist, async (req, res, next) => {
   try {
     const config = await getWhitelistPublicConfig();
