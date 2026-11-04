@@ -235,3 +235,53 @@ Status| Meaning
 
 NOXRIDGE COMMUNITY
 NOXRIDGE UNIVERSAL BACKEND — API Documentation
+
+
+13. Account API (PostgreSQL required)
+
+The account endpoints are disabled until DATABASE_URL points to a persistent PostgreSQL database.
+
+POST /account/register
+Body: { "username": "player_name", "password": "at-least-10-characters" }
+Creates a trial account. Trial duration is controlled by TRIAL_DURATION_HOURS (default 24 hours).
+
+POST /account/login
+Body: same username/password fields. Returns a bearer session token.
+
+GET /account/me
+Authorization: Bearer ACCOUNT_TOKEN
+Returns the account plan and trial expiry.
+
+POST /account/logout
+Authorization: Bearer ACCOUNT_TOKEN
+Revokes the current session.
+
+GET /account/open-cloud-key/status
+Authorization: Bearer ACCOUNT_TOKEN
+Returns whether a permanent account has a saved key and its last update time. Never returns the key.
+
+PUT /account/open-cloud-key
+Authorization: Bearer ACCOUNT_TOKEN
+Body: { "apiKey": "ROBLOX_OPEN_CLOUD_KEY" }
+Available only to permanent accounts. The key is encrypted with AES-256-GCM before it is stored. Set KEY_ENCRYPTION_SECRET to a random secret of at least 32 characters.
+
+DELETE /account/open-cloud-key
+Authorization: Bearer ACCOUNT_TOKEN
+Deletes the saved key.
+
+POST /account/admin/promote
+Header: x-master-key: MASTER_KEY
+Body: { "username": "player_name" }
+Owner-only endpoint to promote an account to permanent. Never place MASTER_KEY in the importer.
+
+Trial policy:
+- Trial accounts do not get their Open Cloud key saved in PostgreSQL.
+- Trial users must provide their key transiently on each future Roblox Open Cloud operation; that operation endpoint still needs to be integrated.
+- Permanent accounts can save one Open Cloud key for reuse.
+- AI remains configured with the backend-owned AI_API_KEY, separate from users' Roblox keys.
+
+Security notes:
+- Passwords are stored as scrypt hashes, not plaintext.
+- Session tokens are stored as SHA-256 hashes and expire after 30 days.
+- Saved Open Cloud keys are encrypted at rest. Rotating KEY_ENCRYPTION_SECRET without re-encrypting stored keys makes existing saved keys unreadable.
+- Account registration currently creates trial accounts; promotion is controlled by the master-key endpoint.
