@@ -56,7 +56,7 @@ router.put('/open-cloud-key', requireWhitelist, async (req, res, next) => {
       const keyType = typeof rawKey;
       const keyLength = typeof rawKey === 'string' ? rawKey.trim().length : -1;
       throw new AppError(
-        `Invalid Open Cloud key payload: bodyType=${bodyType}; keys=${bodyKeys}; apiKeyType=${keyType}; apiKeyLength=${keyLength}. Expected JSON {apiKey:string} with 20-512 characters.`,
+        `Invalid Open Cloud key payload: bodyType=${bodyType}; keys=${bodyKeys}; apiKeyType=${keyType}; apiKeyLength=${keyLength}. Expected JSON {apiKey:string} with at least 20 characters; no maximum length is enforced.`,
         400,
         'VALIDATION_ERROR'
       );
