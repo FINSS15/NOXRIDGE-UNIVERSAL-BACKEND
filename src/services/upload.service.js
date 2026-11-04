@@ -141,7 +141,7 @@ const detectFileType = async (buffer, category, extension) => {
 };
 
 // Main upload service
-export const processUpload = async (file, category) => {
+export const processUpload = async (file, category, ownerId = null) => {
   if (!file || !Buffer.isBuffer(file.buffer)) {
     throw new AppError(
       'A valid uploaded file is required.',
@@ -194,7 +194,7 @@ export const processUpload = async (file, category) => {
     extension
   );
 
-  const objectKey = `${category}/${randomUUID()}${extension}`;
+  const objectKey = ownerId\n    ? `users/${ownerId}/${category}/${randomUUID()}${extension}`\n    : `${category}/${randomUUID()}${extension}`;
 
   const storedFile = await uploadObject({
     key: objectKey,
