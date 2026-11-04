@@ -36,7 +36,10 @@ router.post('/upload', requireAccount, uploadSingleFile, async (req, res, next) 
       ...parsed.data
     });
 
-    const operationId = result?.path?.split('/').pop() || result?.operationId;\n    if (operationId) await saveAssetOperation({ accountId: req.account.id, operationId });\n\n    return res.status(202).json({
+    const operationId = result?.path?.split('/').pop() || result?.operationId;
+    if (operationId) await saveAssetOperation({ accountId: req.account.id, operationId });
+
+    return res.status(202).json({
       success: true,
       message: 'Asset upload accepted by Roblox. Check the operation status for the asset ID.',
       data: result,
@@ -47,6 +50,7 @@ router.post('/upload', requireAccount, uploadSingleFile, async (req, res, next) 
 
 router.get('/operations/:operationId', requireAccount, async (req, res, next) => {
   try {
+    await assertAssetOperationOwner(req.account.id, req.params.operationId);
     const apiKey = await resolveAccountOpenCloudKey(
       req.account.id,
       req.get('x-roblox-open-cloud-key')
