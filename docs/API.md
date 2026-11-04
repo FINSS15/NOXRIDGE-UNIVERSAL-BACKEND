@@ -316,3 +316,41 @@ Authorization: Bearer ACCOUNT_TOKEN
 Returns the Roblox operation status and, when processing completes, the asset ID.
 
 The Open Cloud key must have asset write permissions and access to the intended creator/resource. Roblox documents this API as beta. The backend does not receive or store the key in plaintext for permanent accounts.
+
+
+15. Personal Image and Music Storage (PostgreSQL required)
+
+All personal storage endpoints require:
+Authorization: Bearer ACCOUNT_TOKEN
+
+POST /storage/upload
+multipart/form-data fields:
+- file: image or audio file
+- category: image or music
+
+GET /storage
+Lists only the authenticated account's own stored files.
+
+GET /storage/:id/download
+Returns a signed private download URL valid for 15 minutes. The record is looked up using both the file ID and authenticated account ID; another account cannot list or download it.
+
+Objects are stored under a per-account key prefix in the private Backblaze B2 bucket. B2 credentials remain server-side and are not exposed to users.
+
+16. Roblox Image and Audio Publishing
+
+POST /assets/upload
+Authorization: Bearer ACCOUNT_TOKEN
+multipart/form-data fields:
+- file
+- assetType: Image, Decal, or Audio
+- displayName
+- description (optional)
+- creatorType: user or group
+- creatorId: numeric Roblox user ID or group ID
+
+GET /assets/operations/:operationId
+Authorization: Bearer ACCOUNT_TOKEN
+
+The Roblox Open Cloud key is selected from the authenticated account only: permanent accounts use their encrypted saved key; trial accounts must provide x-roblox-open-cloud-key on each request. Operation IDs are recorded against the account that created them, and status checks are restricted to that account.
+
+Roblox's documented endpoints are POST https://apis.roblox.com/assets/v1/assets and GET https://apis.roblox.com/assets/v1/operations/{operationId}. Supported Image/Decal formats are PNG, JPEG, BMP, and TGA; Audio formats are MP3, OGG, WAV, and FLAC. Roblox's published content-upload limit is 20 MB per file; audio duration and monthly quota restrictions also apply.
