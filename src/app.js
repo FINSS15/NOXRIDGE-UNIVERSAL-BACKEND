@@ -8,6 +8,7 @@ import healthRoutes from './routes/health.routes.js';
 import systemRoutes from './routes/system.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import accountRoutes from './routes/account.routes.js';
+import assetsRoutes from './routes/assets.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 
@@ -51,6 +52,7 @@ app.use('/', healthRoutes);
 app.use('/system', apiRateLimiter, systemRoutes);
 app.use('/auth', apiRateLimiter, authRoutes);
 app.use('/account', apiRateLimiter, accountRoutes);
+app.use('/assets', uploadRateLimiter, assetsRoutes);
 app.use('/ai', aiRateLimiter, aiRoutes);
 app.use('/upload', uploadRateLimiter, uploadRoutes);
 
