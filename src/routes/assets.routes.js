@@ -48,7 +48,19 @@ router.get('/open-cloud-key/status', requireWhitelist, async (req, res, next) =>
 router.put('/open-cloud-key', requireWhitelist, async (req, res, next) => {
   try {
     const parsed = keySchema.safeParse(req.body);
-    if (!parsed.success) throw new AppError('Open Cloud API key format is invalid.', 400, 'VALIDATION_ERROR');
+    if (!parsed.success) {
+      // Safe diagnostics only: never include or log the actual Roblox API key.
+      const bodyType = req.body === null ? 'null' : Array.isArray(req.body) ? 'array' : typeof req.body;
+      const bodyKeys = req.body && typeof req.body === 'object' ? Object.keys(req.body).join(',').slice(0, 120) : '(none)';
+      const rawKey = req.body && typeof req.body === 'object' ? req.body.apiKey : undefined;
+      const keyType = typeof rawKey;
+      const keyLength = typeof rawKey === 'string' ? rawKey.trim().length : -1;
+      throw new AppError(
+        `Invalid Open Cloud key payload: bodyType=${bodyType}; keys=${bodyKeys}; apiKeyType=${keyType}; apiKeyLength=${keyLength}. Expected JSON {apiKey:string} with 20-512 characters.`,
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
     await saveWhitelistOpenCloudKey(req.noxridge.userId, parsed.data.apiKey);
     return res.json({ success: true, message: 'Roblox Open Cloud key encrypted and saved for this WL player.' });
   } catch (error) { return next(error); }
