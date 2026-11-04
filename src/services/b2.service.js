@@ -10,7 +10,7 @@ import {
   isB2Ready
 } from '../config/b2.js';
 
-import { AppError } from '../utils/errors.js';
+import { AppError } from '../utils/errors.js';\nimport { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const ensureB2Ready = () => {
   if (!isB2Ready || !b2Client || !B2_BUCKET) {
@@ -141,5 +141,22 @@ export const checkB2Connection = async () => {
       503,
       'B2_CONNECTION_FAILED'
     );
+  }
+};
+
+export const createObjectDownloadUrl = async (key, expiresIn = 900) => {
+  ensureB2Ready();
+  if (!key || typeof key !== 'string') {
+    throw new AppError('A valid storage object key is required.', 400, 'INVALID_OBJECT_KEY');
+  }
+  try {
+    return await getSignedUrl(
+      b2Client,
+      new GetObjectCommand({ Bucket: B2_BUCKET, Key: key }),
+      { expiresIn }
+    );
+  } catch (error) {
+    console.error('[NOXRIDGE B2 SIGN ERROR]', { name: error.name });
+    throw new AppError('Failed to create a private download link.', 503, 'B2_SIGN_FAILED');
   }
 };
