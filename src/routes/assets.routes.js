@@ -17,7 +17,7 @@ import { transformAudio } from '../services/audio-transform.service.js';
 import { processUpload } from '../services/upload.service.js';
 
 const router = Router();
-const keySchema = z.object({ apiKey: z.string().trim().min(20).max(512) });
+const keySchema = z.object({ apiKey: z.string().trim().min(20) });
 const createSchema = z.object({
   assetType: z.enum(['Model', 'Decal', 'Image', 'Audio', 'Animation']),
   displayName: z.string().trim().min(1).max(50),
