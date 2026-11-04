@@ -378,3 +378,29 @@ Fields:
 The backend applies the requested audio effects, exports an MP3, stores a private copy under the authenticated account's B2 prefix, then submits the processed file to Roblox as an Audio asset using that account's Open Cloud key. The Roblox operation ID is account-bound and can be checked with GET /assets/operations/:operationId.
 
 The source must be uploaded as a file. This endpoint does not download, extract, or alter audio from a Roblox asset ID and is not a moderation, rights, or upload-quota bypass. Users must have the rights and permissions to upload the source audio. The processed MP3 must remain within Roblox's 20 MB limit.
+
+
+18. Importer WL Identity and Per-Player Roblox API Key Vault
+
+The importer uses the existing NOXRIDGE whitelist credential. No separate NOXRIDGE account registration, login, or Bearer token is required for /assets routes.
+
+Required headers for the /assets endpoints:
+- x-noxridge-user-id: the Roblox UserId associated with the WL entry
+- x-noxridge-wl-key: the existing raw WL key entered into the importer; the backend verifies it against the current remote whitelist and never stores the raw value
+
+PUT /assets/open-cloud-key
+JSON body: { "apiKey": "the player's Roblox Open Cloud API key" }
+
+GET /assets/open-cloud-key/status
+Returns whether the authenticated WL player's Roblox key is configured.
+
+DELETE /assets/open-cloud-key
+Deletes only that WL player's saved Roblox key.
+
+The Roblox Open Cloud key is encrypted server-side with AES-256-GCM and stored against the verified WL UserId. Upload and operation-status routes resolve only that player's saved key. Image and Audio uploads also create a private Backblaze B2 copy under that player's own users/{UserId}/ prefix. Bypass Music stores its processed MP3 in the same per-player private area.
+
+Required Render environment variables:
+- DATABASE_URL
+- KEY_ENCRYPTION_SECRET (at least 32 characters)
+
+The existing WL credential is used as the proof of whitelist membership; it is not the Roblox API key. Never log or share either secret.
