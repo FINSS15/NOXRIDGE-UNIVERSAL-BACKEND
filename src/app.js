@@ -7,6 +7,7 @@ import { env } from './config/env.js';
 import healthRoutes from './routes/health.routes.js';
 import systemRoutes from './routes/system.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import accountRoutes from './routes/account.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 
@@ -23,7 +24,6 @@ const app = express();
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-
 app.use(helmet());
 
 const allowedOrigins = env.CORS_ORIGIN
@@ -33,7 +33,7 @@ const allowedOrigins = env.CORS_ORIGIN
 app.use(cors({
   origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-master-key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-master-key', 'x-roblox-open-cloud-key']
 }));
 
 app.use(express.json({ limit: '1mb' }));
@@ -50,6 +50,7 @@ app.get('/', (req, res) => res.status(200).json({
 app.use('/', healthRoutes);
 app.use('/system', apiRateLimiter, systemRoutes);
 app.use('/auth', apiRateLimiter, authRoutes);
+app.use('/account', apiRateLimiter, accountRoutes);
 app.use('/ai', aiRateLimiter, aiRoutes);
 app.use('/upload', uploadRateLimiter, uploadRoutes);
 
