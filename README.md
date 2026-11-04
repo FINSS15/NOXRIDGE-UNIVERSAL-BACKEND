@@ -9,7 +9,7 @@
 - OpenAI-compatible AI chat endpoint
 - Image, music, general file, RBXM/RBXMX, and RBXL/RBXLX uploads
 - Backblaze B2 object storage
-- Request rate limits, security headers, validation, and centralized errors
+- PostgreSQL-backed accounts, trial/permanent plans, and encrypted Open Cloud key vault (requires database configuration)\n- Request rate limits, security headers, validation, and centralized errors
 
 ## Requirements
 
@@ -38,7 +38,7 @@
 | POST | `/ai/chat` | AI chat |
 | POST | `/upload` | Upload an object to Backblaze B2 |
 
-See [docs/API.md](docs/API.md) for request formats and details.
+See [docs/API.md](docs/API.md) for request formats and details.\n\n## Account system setup\n\nTo enable account endpoints, provision a persistent PostgreSQL database and set `DATABASE_URL` on Render. Also set `KEY_ENCRYPTION_SECRET` to a unique random value (at least 32 characters) and optionally set `TRIAL_DURATION_HOURS` (default 24). The account schema is created automatically on first account request. Without `DATABASE_URL`, existing backend functions continue to run and account endpoints return HTTP 503.
 
 ## Important Roblox file limitation
 
