@@ -1,0 +1,237 @@
+NOXRIDGE UNIVERSAL BACKEND API
+
+Organization: NOXRIDGE COMMUNITY
+Version: 1.0.0
+Runtime: Node.js 22+
+Framework: Express 5
+Storage: Backblaze B2 (S3 Compatible)
+
+---
+
+1. Overview
+
+NOXRIDGE UNIVERSAL BACKEND is a centralized API service for NOXRIDGE COMMUNITY.
+
+The backend provides:
+
+- API Key authentication
+- Master Key authentication
+- AI Chat API
+- Image upload API
+- Music upload API
+- General file upload API
+- Roblox RBXM and RBXL file upload
+- Backblaze B2 storage integration
+- System status monitoring
+- Health check endpoint
+
+2. Base URL
+
+After deployment, use your Render service URL:
+
+"https://YOUR-SERVICE.onrender.com"
+
+Replace the example URL with your actual deployment URL.
+
+3. Authentication
+
+API Key
+
+Protected endpoints require this header:
+
+"x-api-key: YOUR_API_KEY"
+
+Master Key
+
+Master-protected endpoints require:
+
+"x-master-key: YOUR_MASTER_KEY"
+
+Never expose authentication keys in public repositories or frontend source code.
+
+4. Health Check
+
+GET /health
+
+Checks whether the backend process is running.
+
+Example response:
+
+{
+  "success": true,
+  "service": "NOXRIDGE UNIVERSAL BACKEND",
+  "organization": "NOXRIDGE COMMUNITY",
+  "status": "healthy",
+  "version": "1.0.0"
+}
+
+5. System Status
+
+GET /system/status
+
+Returns backend runtime and service configuration status.
+
+Response includes:
+
+- Node.js version
+- Server uptime
+- API Key configuration state
+- Master Key configuration state
+- Backblaze B2 configuration state
+- AI provider configuration state
+
+This endpoint reports configuration state, not verified external connectivity.
+
+6. Authentication Verification
+
+Verify API Key
+
+GET /auth/verify
+
+Required header:
+
+"x-api-key: YOUR_API_KEY"
+
+Verify Master Key
+
+GET /auth/verify/master
+
+Required header:
+
+"x-master-key: YOUR_MASTER_KEY"
+
+7. AI Chat API
+
+POST /ai/chat
+
+Required header:
+
+"x-api-key: YOUR_API_KEY"
+
+Content-Type:
+
+"application/json"
+
+Request body:
+
+{
+  "message": "Hello NOXRIDGE AI",
+  "conversation": []
+}
+
+Conversation history example:
+
+{
+  "message": "What did I ask earlier?",
+  "conversation": [
+    {
+      "role": "user",
+      "content": "Hello"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! How can I help?"
+    }
+  ]
+}
+
+The AI service requires a configured OpenAI-compatible provider.
+
+8. File Upload API
+
+POST /upload
+
+Required header:
+
+"x-api-key: YOUR_API_KEY"
+
+Content-Type:
+
+"multipart/form-data"
+
+Fields:
+
+Field| Description
+file| File to upload
+category| Upload category
+
+Supported categories:
+
+Category| Supported extensions
+image| JPG, JPEG, PNG, WEBP, GIF
+music| MP3, WAV, OGG, FLAC, M4A, AAC
+file| PDF, ZIP, TXT
+rbxm| RBXM, RBXMX
+rbxl| RBXL, RBXLX
+
+Maximum file size: 50 MB.
+
+Uploaded objects are stored in Backblaze B2.
+
+Roblox format validation currently checks basic file signatures. It does not parse or reconstruct the complete Roblox hierarchy or script source.
+
+9. Rate Limits
+
+Endpoint group| Limit
+General API| 100 requests / 15 minutes
+AI Chat| 20 requests / 15 minutes
+Upload| 10 requests / 15 minutes
+
+Limits are applied per client IP using the configured Express rate limiter.
+
+10. Environment Variables
+
+Variable| Purpose
+NODE_ENV| Application environment
+PORT| Server port
+CORS_ORIGIN| Allowed browser origins
+API_KEY| API authentication
+MASTER_KEY| Master authentication
+B2_ENDPOINT| Backblaze S3 endpoint
+B2_REGION| Backblaze region
+B2_BUCKET| Bucket name
+B2_KEY_ID| Application Key ID
+B2_APPLICATION_KEY| Application Key
+AI_API_KEY| AI provider key
+AI_BASE_URL| AI provider base URL
+AI_MODEL| AI model identifier
+
+11. Error Responses
+
+All application errors use a standardized JSON structure:
+
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Error description."
+  }
+}
+
+Common HTTP statuses:
+
+Status| Meaning
+400| Bad Request
+401| Unauthorized
+403| Forbidden
+404| Route Not Found
+413| Payload Too Large
+429| Rate Limit Exceeded
+500| Internal Server Error
+502| Upstream Provider Error
+503| Service Unavailable
+504| Gateway Timeout
+
+12. Security
+
+- Keep all API credentials private.
+- Use HTTPS in production.
+- Do not commit ".env" files.
+- Configure restricted Backblaze B2 application permissions.
+- Do not expose Master Keys to public clients.
+- Monitor API usage and upload limits.
+
+---
+
+NOXRIDGE COMMUNITY
+NOXRIDGE UNIVERSAL BACKEND — API Documentation
