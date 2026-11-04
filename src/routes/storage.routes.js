@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAccount } from '../middleware/accountAuth.js';
 import { uploadSingleFile } from '../middleware/upload.js';
 import { processUpload } from '../services/upload.service.js';
-import { uploadObject, createObjectDownloadUrl, deleteObject } from '../services/b2.service.js';
+import { createObjectDownloadUrl, deleteObject } from '../services/b2.service.js';
 import { recordStorageObject, listStorageObjects, getStorageObjectForAccount } from '../services/account.service.js';
 import { AppError } from '../utils/errors.js';
 
@@ -49,7 +49,7 @@ router.get('/', requireAccount, async (req, res, next) => {
 
 router.get('/:id/download', requireAccount, async (req, res, next) => {
   try {
-    if (!/^\\d+$/.test(req.params.id)) throw new AppError('Invalid storage file ID.', 400, 'INVALID_STORAGE_ID');
+    if (!/^\d+$/.test(req.params.id)) throw new AppError('Invalid storage file ID.', 400, 'INVALID_STORAGE_ID');
     const record = await getStorageObjectForAccount(req.account.id, req.params.id);
     const url = await createObjectDownloadUrl(record.object_key, 900);
     return res.json({ success: true, data: { url, expiresIn: 900 } });
