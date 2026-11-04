@@ -255,3 +255,78 @@ export const resolveAccountOpenCloudKey = async (accountId, transientKey) => {
     auth_tag: account.auth_tag
   });
 };
+
+export const recordStorageObject = async ({ accountId, key, filename, category, contentType, size }) => {
+  const db = await ensureSchema();
+  await db.query(`CREATE TABLE IF NOT EXISTS noxridge_storage_objects (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES noxridge_accounts(id) ON DELETE CASCADE,
+    object_key TEXT NOT NULL UNIQUE,
+    filename VARCHAR(255) NOT NULL,
+    category VARCHAR(16) NOT NULL CHECK (category IN ('image','music')),
+    content_type VARCHAR(128) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  const result = await db.query(
+    `INSERT INTO noxridge_storage_objects
+      (account_id,object_key,filename,category,content_type,size_bytes)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id,filename,category,content_type,size_bytes,created_at`,
+    [accountId, key, filename, category, contentType, size]
+  );
+  return result.rows[0];
+};
+
+export const listStorageObjects = async (accountId) => {
+  const db = await ensureSchema();
+  await db.query(`CREATE TABLE IF NOT EXISTS noxridge_storage_objects (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES noxridge_accounts(id) ON DELETE CASCADE,
+    object_key TEXT NOT NULL UNIQUE,
+    filename VARCHAR(255) NOT NULL,
+    category VARCHAR(16) NOT NULL CHECK (category IN ('image','music')),
+    content_type VARCHAR(128) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  const result = await db.query(
+    'SELECT id,filename,category,content_type,size_bytes,created_at FROM noxridge_storage_objects WHERE account_id=$1 ORDER BY created_at DESC LIMIT 100',
+    [accountId]
+  );
+  return result.rows;
+};
+
+export const getStorageObjectForAccount = async (accountId, objectId) => {
+  const db = await ensureSchema();
+  const result = await db.query(
+    'SELECT id,object_key,filename,category,content_type,size_bytes,created_at FROM noxridge_storage_objects WHERE id=$1 AND account_id=$2',
+    [objectId, accountId]
+  );
+  if (!result.rows[0]) throw new AppError('Storage file was not found for this account.', 404, 'STORAGE_FILE_NOT_FOUND');
+  return result.rows[0];
+};
+
+export const saveAssetOperation = async ({ accountId, operationId }) => {
+  const db = await ensureSchema();
+  await db.query(`CREATE TABLE IF NOT EXISTS noxridge_asset_operations (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES noxridge_accounts(id) ON DELETE CASCADE,
+    operation_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(account_id, operation_id)
+  )`);
+  await db.query(
+    'INSERT INTO noxridge_asset_operations (account_id,operation_id) VALUES ($1,$2) ON CONFLICT (account_id,operation_id) DO NOTHING',
+    [accountId, operationId]
+  );
+};
+
+export const assertAssetOperationOwner = async (accountId, operationId) => {
+  const db = await ensureSchema();
+  const result = await db.query(
+    'SELECT 1 FROM noxridge_asset_operations WHERE account_id=$1 AND operation_id=$2',
+    [accountId, operationId]
+  );
+  if (!result.rows[0]) throw new AppError('Operation was not created by this account.', 404, 'ASSET_OPERATION_NOT_FOUND');
+};
