@@ -145,6 +145,8 @@ Required header:
 
 "x-api-key: YOUR_API_KEY"
 
+This general endpoint accepts only file, rbxm, and rbxl categories. Personal image/music uploads use POST /storage/upload with an account Bearer token.
+
 Content-Type:
 
 "multipart/form-data"
