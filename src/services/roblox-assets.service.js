@@ -14,6 +14,7 @@ const assetFormats = {
   Decal: {
     '.png': 'image/png',
     '.jpeg': 'image/jpeg',
+    '.jpg': 'image/jpeg',
     '.bmp': 'image/bmp',
     '.tga': 'image/tga'
   },
