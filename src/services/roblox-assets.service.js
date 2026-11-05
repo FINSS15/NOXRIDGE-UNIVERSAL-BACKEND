@@ -41,11 +41,21 @@ const getExtension = (filename) => {
   return index >= 0 ? filename.slice(index).toLowerCase() : '';
 };
 
-const parseUpstream = async (response) => {
+const safeKeyMeta = (apiKey) => {
+  const normalized = String(apiKey ?? '').trim();
+  return { keyLength: normalized.length, keyLast4: normalized.slice(-4) || '(empty)' };
+};
+
+const parseUpstream = async (response, context = {}) => {
   const raw = await response.text();
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
   if (!response.ok) {
+    console.error('[NOXRIDGE ROBLOX ASSET API ERROR]', {
+      upstreamStatus: response.status,
+      upstreamBody: raw.slice(0, 1200),
+      ...context
+    });
     const status = response.status >= 400 && response.status < 500 ? 400 : 502;
     const upstreamMessage = String(
       data?.message || data?.error?.message || data?.detail || data?.error || ''
@@ -84,9 +94,12 @@ export const createRobloxAsset = async ({
     throw new AppError(`File extension ${extension || '(none)'} is not supported for ${assetType}.`, 400, 'ASSET_FORMAT_UNSUPPORTED');
   }
 
+  const normalizedApiKey = String(apiKey ?? '').trim();
+  if (!normalizedApiKey) throw new AppError('Saved Roblox Open Cloud key is empty after trimming.', 400, 'ROBLOX_KEY_EMPTY');
   const creator = creatorType === 'group'
     ? { groupId: String(creatorId) }
     : { userId: String(creatorId) };
+  const keyMeta = safeKeyMeta(normalizedApiKey);
 
   const form = new FormData();
   // Roblox expects the request part as application/json, not a plain text form field.
@@ -106,14 +119,20 @@ export const createRobloxAsset = async ({
   try {
     response = await fetch(`${ROBLOX_ASSETS_URL}/assets`, {
       method: 'POST',
-      headers: { 'x-api-key': apiKey },
+      headers: { 'x-api-key': normalizedApiKey },
       body: form,
       signal: AbortSignal.timeout(60000)
     });
   } catch {
     throw new AppError('Could not reach Roblox Open Cloud. Try again later.', 502, 'ROBLOX_UNAVAILABLE');
   }
-  return parseUpstream(response);
+  return parseUpstream(response, {
+    ...keyMeta,
+    assetType,
+    creatorType,
+    creatorId: String(creatorId),
+    creatorPayload: creator
+  });
 };
 
 export const getRobloxAssetOperation = async ({ apiKey, operationId }) => {
