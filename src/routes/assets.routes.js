@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireWhitelist } from '../middleware/whitelistAuth.js';
 import { uploadSingleFile } from '../middleware/upload.js';
+import { uploadRateLimiter } from '../middleware/rateLimit.js';
 import {
   saveWhitelistOpenCloudKey,
   getWhitelistOpenCloudKeyStatus,
@@ -91,7 +92,7 @@ router.delete('/open-cloud-key', requireWhitelist, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.post('/upload', requireWhitelist, uploadSingleFile, async (req, res, next) => {
+router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('No file was provided.', 400, 'FILE_REQUIRED');
     const parsed = createSchema.safeParse(req.body);
@@ -135,7 +136,7 @@ router.post('/upload', requireWhitelist, uploadSingleFile, async (req, res, next
   } catch (error) { return next(error); }
 });
 
-router.post('/bypass-music', requireWhitelist, uploadSingleFile, async (req, res, next) => {
+router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFile, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('Choose an audio source file you own or are authorized to use.', 400, 'AUDIO_FILE_REQUIRED');
     const parsed = bypassMusicSchema.safeParse(req.body);
