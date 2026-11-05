@@ -222,8 +222,18 @@ export const saveWhitelistOpenCloudKey = async (id, apiKey) => {
   finally { client.release(); }
 };
 export const getWhitelistOpenCloudKeyStatus = async (id) => {
-  const q = await schema(), r = await q.query('SELECT encrypted_key,updated_at FROM noxridge_wl_users WHERE user_id=$1', [id]);
-  return { configured: Boolean(r.rows[0]?.encrypted_key), updatedAt: r.rows[0]?.updated_at ?? null };
+  const q = await schema(), r = await q.query('SELECT encrypted_key,iv,auth_tag,updated_at FROM noxridge_wl_users WHERE user_id=$1', [id]);
+  const row = r.rows[0];
+  let maskedKey = null;
+  if (row?.encrypted_key) {
+    const plain = decrypt({ encrypted_key: row.encrypted_key, iv: row.iv, auth_tag: row.auth_tag }).trim();
+    maskedKey = `••••••••${plain.slice(-8)}`;
+  }
+  return {
+    configured: Boolean(row?.encrypted_key),
+    maskedKey,
+    updatedAt: row?.updated_at ?? null
+  };
 };
 export const listWhitelistOpenCloudKeyHistory = async (id) => {
   const q = await schema();
