@@ -261,8 +261,16 @@ export const deleteWhitelistOpenCloudKey = async (id) => {
   const q = await schema(), client = await q.connect();
   try {
     await client.query('BEGIN');
-    await archiveActiveOpenCloudKey(client, id);
-    await client.query('UPDATE noxridge_wl_users SET encrypted_key=NULL,iv=NULL,auth_tag=NULL,updated_at=NOW() WHERE user_id=$1', [id]);
+    // Explicit user deletion means permanent removal: do not archive the active key.
+    await client.query(
+      'UPDATE noxridge_wl_users SET encrypted_key=NULL,iv=NULL,auth_tag=NULL,updated_at=NOW() WHERE user_id=$1',
+      [id]
+    );
+    // Purge only this WL user's saved key history; never affect other users.
+    await client.query(
+      'DELETE FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1',
+      [id]
+    );
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
   finally { client.release(); }
