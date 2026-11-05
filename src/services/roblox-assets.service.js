@@ -121,7 +121,8 @@ export const createRobloxAsset = async ({
   displayName,
   description,
   creatorType,
-  creatorId
+  creatorId,
+  audit = {}
 }) => {
   if (!file?.buffer) throw new AppError('Upload file is required.', 400, 'FILE_REQUIRED');
   if (file.buffer.length > MAX_ASSET_BYTES) {
@@ -168,6 +169,8 @@ export const createRobloxAsset = async ({
     throw new AppError('Could not reach Roblox Open Cloud. Try again later.', 502, 'ROBLOX_UNAVAILABLE');
   }
   return parseUpstream(response, {
+    userId: String(audit.userId || ''),
+    keyUpdatedAt: audit.keyUpdatedAt || null,
     ...keyMeta,
     assetType,
     creatorType,
@@ -183,7 +186,7 @@ export const getRobloxAssetOperation = async ({ apiKey, operationId }) => {
       `${ROBLOX_ASSETS_URL}/operations/${encodeURIComponent(operationId)}`,
       {
         method: 'GET',
-        headers: { 'x-api-key': apiKey },
+        headers: { 'x-api-key': String(apiKey ?? '').trim() },
         signal: AbortSignal.timeout(20000)
       }
     );
