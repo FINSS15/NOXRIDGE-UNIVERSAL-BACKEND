@@ -48,6 +48,17 @@ router.get('/open-cloud-key/status', requireWhitelist, async (req, res, next) =>
   catch (error) { return next(error); }
 });
 
+// Explicit reveal is scoped to the authenticated WL player. The secret is never logged.
+router.get('/open-cloud-key/reveal', requireWhitelist, async (req, res, next) => {
+  try {
+    const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
+    return res.set('Cache-Control', 'no-store').json({
+      success: true,
+      data: { apiKey, revealed: true }
+    });
+  } catch (error) { return next(error); }
+});
+
 router.post('/open-cloud-key/diagnose', requireWhitelist, async (req, res, next) => {
   try {
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
@@ -103,7 +114,18 @@ router.put('/open-cloud-key', requireWhitelist, async (req, res, next) => {
       );
     }
     await saveWhitelistOpenCloudKey(req.noxridge.userId, parsed.data.apiKey);
-    return res.json({ success: true, message: 'Roblox Open Cloud key encrypted and saved for this WL player.' });
+    const keyStatus = await getWhitelistOpenCloudKeyStatus(req.noxridge.userId);
+    return res.set('Cache-Control', 'no-store').json({
+      success: true,
+      message: 'Roblox Open Cloud key encrypted and saved for this WL player. It is active immediately; no Render redeploy is required.',
+      data: {
+        saved: true,
+        appliedImmediately: true,
+        requiresRedeploy: false,
+        maskedKey: keyStatus.maskedKey,
+        updatedAt: keyStatus.updatedAt
+      }
+    });
   } catch (error) { return next(error); }
 });
 
