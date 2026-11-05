@@ -5,6 +5,8 @@ import { uploadSingleFile } from '../middleware/upload.js';
 import {
   saveWhitelistOpenCloudKey,
   getWhitelistOpenCloudKeyStatus,
+  listWhitelistOpenCloudKeyHistory,
+  restoreWhitelistOpenCloudKeyHistory,
   deleteWhitelistOpenCloudKey,
   resolveWhitelistOpenCloudKey,
   saveWhitelistAssetOperation,
@@ -43,6 +45,22 @@ const bypassMusicSchema = z.object({
 router.get('/open-cloud-key/status', requireWhitelist, async (req, res, next) => {
   try { return res.json({ success: true, data: await getWhitelistOpenCloudKeyStatus(req.noxridge.userId) }); }
   catch (error) { return next(error); }
+});
+
+router.get('/open-cloud-key/history', requireWhitelist, async (req, res, next) => {
+  try {
+    return res.json({ success: true, data: await listWhitelistOpenCloudKeyHistory(req.noxridge.userId) });
+  } catch (error) { return next(error); }
+});
+
+router.post('/open-cloud-key/history/:historyId/restore', requireWhitelist, async (req, res, next) => {
+  try {
+    if (!/^\\d{1,20}$/.test(String(req.params.historyId || ''))) {
+      throw new AppError('History ID is invalid.', 400, 'INVALID_HISTORY_ID');
+    }
+    const data = await restoreWhitelistOpenCloudKeyHistory(req.noxridge.userId, req.params.historyId);
+    return res.json({ success: true, data, message: 'Previous Roblox Open Cloud key restored for this WL player.' });
+  } catch (error) { return next(error); }
 });
 
 router.put('/open-cloud-key', requireWhitelist, async (req, res, next) => {
