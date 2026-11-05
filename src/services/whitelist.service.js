@@ -201,12 +201,15 @@ const archiveActiveOpenCloudKey = async (client, id) => {
   `, [id, row.encrypted_key, row.iv, row.auth_tag, plain.slice(-8)]);
 };
 export const saveWhitelistOpenCloudKey = async (id, apiKey) => {
-  const q = await schema(), client = await q.connect(), e = encrypt(apiKey);
+  const normalizedApiKey = String(apiKey ?? '').trim();
+  if (normalizedApiKey.length < 20) throw new AppError('Roblox Open Cloud key is invalid or empty.', 400, 'ROBLOX_KEY_INVALID');
+  const q = await schema(), client = await q.connect(), e = encrypt(normalizedApiKey);
   try {
     await client.query('BEGIN');
     await archiveActiveOpenCloudKey(client, id);
-    await client.query('UPDATE noxridge_wl_users SET encrypted_key=$2,iv=$3,auth_tag=$4,updated_at=NOW() WHERE user_id=$1',
+    const saved = await client.query('UPDATE noxridge_wl_users SET encrypted_key=$2,iv=$3,auth_tag=$4,updated_at=NOW() WHERE user_id=$1',
       [id, e.body, e.iv, e.tag]);
+    if (saved.rowCount !== 1) throw new AppError('WL user vault record was not found; API Key was not saved.', 409, 'KEY_VAULT_USER_MISSING');
     await client.query(`
       DELETE FROM noxridge_wl_open_cloud_key_history
       WHERE user_id=$1 AND id NOT IN (
@@ -278,7 +281,12 @@ export const deleteWhitelistOpenCloudKey = async (id) => {
 export const resolveWhitelistOpenCloudKey = async (id) => {
   const q = await schema(), r = await q.query('SELECT encrypted_key,iv,auth_tag FROM noxridge_wl_users WHERE user_id=$1', [id]);
   if (!r.rows[0]?.encrypted_key) throw new AppError('Masukkan dan simpan Roblox Open Cloud API Key terlebih dahulu.', 400, 'ROBLOX_KEY_NOT_SAVED');
-  return decrypt({ encrypted_key: r.rows[0].encrypted_key, iv: r.rows[0].iv, auth_tag: r.rows[0].auth_tag });
+  try {
+    return decrypt({ encrypted_key: r.rows[0].encrypted_key, iv: r.rows[0].iv, auth_tag: r.rows[0].auth_tag }).trim();
+  } catch (error) {
+    console.error('[NOXRIDGE KEY VAULT DECRYPT ERROR]', { userId: String(id), code: error?.code || 'DECRYPT_FAILED' });
+    throw new AppError('Saved Roblox API Key could not be decrypted. Check that KEY_ENCRYPTION_SECRET in Render is unchanged.', 500, 'KEY_VAULT_DECRYPT_FAILED');
+  }
 };
 export const saveWhitelistAssetOperation = async (id, operationId) => {
   const q = await schema();
