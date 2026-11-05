@@ -188,11 +188,17 @@ const decrypt = (row) => {
   return Buffer.concat([decipher.update(Buffer.from(row.encrypted_key, 'base64')), decipher.final()]).toString('utf8');
 };
 const archiveActiveOpenCloudKey = async (client, id) => {
+  const current = await client.query(`
+    SELECT encrypted_key,iv,auth_tag FROM noxridge_wl_users
+    WHERE user_id=$1 AND encrypted_key IS NOT NULL
+  `, [id]);
+  if (!current.rows[0]) return;
+  const row = current.rows[0];
+  const plain = decrypt(row);
   await client.query(`
     INSERT INTO noxridge_wl_open_cloud_key_history(user_id,encrypted_key,iv,auth_tag,key_suffix)
-    SELECT user_id,encrypted_key,iv,auth_tag,RIGHT(encrypted_key,8)
-    FROM noxridge_wl_users WHERE user_id=$1 AND encrypted_key IS NOT NULL
-  `, [id]);
+    VALUES($1,$2,$3,$4,$5)
+  `, [id, row.encrypted_key, row.iv, row.auth_tag, plain.slice(-8)]);
 };
 export const saveWhitelistOpenCloudKey = async (id, apiKey) => {
   const q = await schema(), client = await q.connect(), e = encrypt(apiKey);
