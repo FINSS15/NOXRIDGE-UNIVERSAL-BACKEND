@@ -14,7 +14,7 @@ import {
   assertWhitelistAssetOperationOwner,
   recordWhitelistStorageObject
 } from '../services/whitelist.service.js';
-import { createRobloxAsset, getRobloxAssetOperation } from '../services/roblox-assets.service.js';
+import { createRobloxAsset, getRobloxAssetOperation, inspectRobloxOpenCloudKey } from '../services/roblox-assets.service.js';
 import { AppError } from '../utils/errors.js';
 import { transformAudio } from '../services/audio-transform.service.js';
 import { processUpload } from '../services/upload.service.js';
@@ -46,6 +46,28 @@ const bypassMusicSchema = z.object({
 router.get('/open-cloud-key/status', requireWhitelist, async (req, res, next) => {
   try { return res.json({ success: true, data: await getWhitelistOpenCloudKeyStatus(req.noxridge.userId) }); }
   catch (error) { return next(error); }
+});
+
+router.post('/open-cloud-key/diagnose', requireWhitelist, async (req, res, next) => {
+  try {
+    const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
+    const result = await inspectRobloxOpenCloudKey({ apiKey });
+    const ownerMatches = result.authorizedUserId == null
+      ? null
+      : String(result.authorizedUserId) === String(req.noxridge.userId);
+    const assetWriteScope = result.scopes?.some(scope =>
+      scope.name === 'asset' && scope.operations.includes('write') &&
+      (scope.userIds.includes('*') || scope.userIds.includes(String(req.noxridge.userId)))
+    ) || false;
+    return res.json({
+      success: true,
+      data: {
+        ...result,
+        ownerMatchesWhitelistUser: ownerMatches,
+        assetWriteScopeForWhitelistUser: assetWriteScope
+      }
+    });
+  } catch (error) { return next(error); }
 });
 
 router.get('/open-cloud-key/history', requireWhitelist, async (req, res, next) => {
