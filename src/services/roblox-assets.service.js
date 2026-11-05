@@ -47,8 +47,15 @@ const parseUpstream = async (response) => {
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
   if (!response.ok) {
     const status = response.status >= 400 && response.status < 500 ? 400 : 502;
+    const upstreamMessage = String(
+      data?.message || data?.error?.message || data?.detail || data?.error || ''
+    ).replace(/[\\r\\n\\t]+/g, ' ').slice(0, 260);
+    const upstreamCode = String(data?.code || data?.error?.code || '').slice(0, 80);
+    const detail = [upstreamCode, upstreamMessage].filter(Boolean).join(': ');
     throw new AppError(
-      'Roblox rejected the asset request. Check the API key permissions, creator ID, asset format, and upload quota.',
+      detail
+        ? `Roblox API (${response.status}): ${detail}`
+        : `Roblox API rejected the asset request (HTTP ${response.status}). Check API key scopes, creator access, asset format, and upload quota.`,
       status,
       'ROBLOX_ASSET_REQUEST_FAILED'
     );
@@ -82,12 +89,13 @@ export const createRobloxAsset = async ({
     : { userId: String(creatorId) };
 
   const form = new FormData();
-  form.append('request', JSON.stringify({
+  // Roblox expects the request part as application/json, not a plain text form field.
+  form.append('request', new Blob([JSON.stringify({
     assetType,
     displayName: displayName.trim(),
     description: (description || '').trim(),
     creationContext: { creator }
-  }));
+  })], { type: 'application/json' }));
   form.append(
     'fileContent',
     new Blob([file.buffer], { type: contentType }),
