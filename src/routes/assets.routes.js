@@ -97,22 +97,39 @@ router.post('/upload', requireWhitelist, uploadSingleFile, async (req, res, next
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Asset metadata is invalid.', 400, 'VALIDATION_ERROR');
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
-    let privateStorage = null;
-    if (parsed.data.assetType === 'Image' || parsed.data.assetType === 'Audio') {
-      const category = parsed.data.assetType === 'Image' ? 'image' : 'music';
-      const privateCopy = await processUpload(req.file, category, req.noxridge.userId);
-      privateStorage = await recordWhitelistStorageObject({
-        userId: req.noxridge.userId, key: privateCopy.key, filename: privateCopy.filename,
-        category, contentType: privateCopy.contentType, size: privateCopy.size
-      });
-    }
+    // Submit to Roblox first. A private B2 archive failure must not cancel a valid
+    // Roblox asset submission or make the importer report a false upload failure.
     const result = await createRobloxAsset({ apiKey, file: req.file, ...parsed.data });
     const operationId = result?.path?.split('/').pop() || result?.operationId;
     if (operationId) await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
+
+    let privateStorage = null;
+    let privateStorageWarning = null;
+    if (parsed.data.assetType === 'Image' || parsed.data.assetType === 'Audio') {
+      const category = parsed.data.assetType === 'Image' ? 'image' : 'music';
+      try {
+        const privateCopy = await processUpload(req.file, category, req.noxridge.userId);
+        privateStorage = await recordWhitelistStorageObject({
+          userId: req.noxridge.userId, key: privateCopy.key, filename: privateCopy.filename,
+          category, contentType: privateCopy.contentType, size: privateCopy.size
+        });
+      } catch (storageError) {
+        // Do not log file contents, API keys, or WL credentials.
+        console.error('[NOXRIDGE PRIVATE ASSET ARCHIVE ERROR]', {
+          userId: String(req.noxridge.userId),
+          category,
+          code: storageError?.code || 'PRIVATE_STORAGE_FAILED',
+          message: String(storageError?.message || 'Unknown storage error').slice(0, 180)
+        });
+        privateStorageWarning = 'Roblox upload submitted, but private archive storage failed. Contact NOXRIDGE owner if this persists.';
+      }
+    }
     return res.status(202).json({
       success: true,
-      message: 'Asset submitted to Roblox and private copy stored for this WL player when applicable.',
-      data: { ...result, privateStorage },
+      message: privateStorageWarning
+        ? 'Asset submitted to Roblox. Private archive storage is temporarily unavailable.'
+        : 'Asset submitted to Roblox and private copy stored for this WL player when applicable.',
+      data: { ...result, privateStorage, privateStorageWarning },
       timestamp: new Date().toISOString()
     });
   } catch (error) { return next(error); }
