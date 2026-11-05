@@ -20,7 +20,7 @@ import { transformAudio } from '../services/audio-transform.service.js';
 import { processUpload } from '../services/upload.service.js';
 
 const router = Router();
-const keySchema = z.object({ apiKey: z.string().trim().min(20) });
+const keySchema = z.object({ apiKey: z.string().trim().min(20).max(512).refine(value => !/\s/.test(value), 'API Key must not contain spaces or line breaks.') });
 const createSchema = z.object({
   assetType: z.enum(['Model', 'Decal', 'Image', 'Audio', 'Animation']),
   displayName: z.string().trim().min(1).max(50),
@@ -113,7 +113,7 @@ router.put('/open-cloud-key', requireWhitelist, async (req, res, next) => {
         'VALIDATION_ERROR'
       );
     }
-    await saveWhitelistOpenCloudKey(req.noxridge.userId, parsed.data.apiKey);
+    await saveWhitelistOpenCloudKey(String(req.noxridge.userId), parsed.data.apiKey, req.noxridge.wlKeyHash);
     const keyStatus = await getWhitelistOpenCloudKeyStatus(req.noxridge.userId);
     return res.set('Cache-Control', 'no-store').json({
       success: true,
@@ -145,9 +145,10 @@ router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, as
       throw new AppError('Creator UserId must match the authenticated WL account that owns this API Key.', 400, 'CREATOR_ID_MISMATCH');
     }
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
+    const keyStatus = await getWhitelistOpenCloudKeyStatus(req.noxridge.userId);
     // Submit to Roblox first. A private B2 archive failure must not cancel a valid
     // Roblox asset submission or make the importer report a false upload failure.
-    const result = await createRobloxAsset({ apiKey, file: req.file, ...parsed.data });
+    const result = await createRobloxAsset({ apiKey, audit: { userId: String(req.noxridge.userId), keyUpdatedAt: keyStatus.updatedAt }, file: req.file, ...parsed.data });
     const operationId = result?.path?.split('/').pop() || result?.operationId;
     if (operationId) await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
 
@@ -189,6 +190,7 @@ router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFi
     const parsed = bypassMusicSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Music processing settings are invalid.', 400, 'VALIDATION_ERROR');
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
+    const keyStatus = await getWhitelistOpenCloudKeyStatus(req.noxridge.userId);
     const processedBuffer = await transformAudio({
       buffer: req.file.buffer,
       speed: parsed.data.speed,
@@ -211,6 +213,7 @@ router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFi
     });
     const robloxResult = await createRobloxAsset({
       apiKey,
+      audit: { userId: String(req.noxridge.userId), keyUpdatedAt: keyStatus.updatedAt },
       file: { buffer: processedBuffer, originalname: `${safeBaseName}.mp3` },
       assetType: 'Audio',
       displayName: safeBaseName,
