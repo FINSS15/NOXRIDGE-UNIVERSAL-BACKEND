@@ -36,6 +36,13 @@ const schema = async () => {
       user_id BIGINT NOT NULL, operation_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY(user_id, operation_id)
     );
+    CREATE TABLE IF NOT EXISTS noxridge_wl_open_cloud_key_history (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
+      encrypted_key TEXT NOT NULL, iv TEXT NOT NULL, auth_tag TEXT NOT NULL,
+      key_suffix VARCHAR(8) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS noxridge_wl_open_cloud_key_history_user_created
+      ON noxridge_wl_open_cloud_key_history(user_id, created_at DESC);
     CREATE TABLE IF NOT EXISTS noxridge_wl_storage_objects (
       id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, object_key TEXT NOT NULL UNIQUE,
       filename VARCHAR(255) NOT NULL, category VARCHAR(16) NOT NULL CHECK(category IN ('image','music')),
@@ -180,17 +187,79 @@ const decrypt = (row) => {
   decipher.setAuthTag(Buffer.from(row.auth_tag, 'base64'));
   return Buffer.concat([decipher.update(Buffer.from(row.encrypted_key, 'base64')), decipher.final()]).toString('utf8');
 };
+const archiveActiveOpenCloudKey = async (client, id) => {
+  await client.query(`
+    INSERT INTO noxridge_wl_open_cloud_key_history(user_id,encrypted_key,iv,auth_tag,key_suffix)
+    SELECT user_id,encrypted_key,iv,auth_tag,RIGHT(encrypted_key,8)
+    FROM noxridge_wl_users WHERE user_id=$1 AND encrypted_key IS NOT NULL
+  `, [id]);
+};
 export const saveWhitelistOpenCloudKey = async (id, apiKey) => {
-  const q = await schema(), e = encrypt(apiKey);
-  await q.query('UPDATE noxridge_wl_users SET encrypted_key=$2,iv=$3,auth_tag=$4,updated_at=NOW() WHERE user_id=$1', [id, e.body, e.iv, e.tag]);
+  const q = await schema(), client = await q.connect(), e = encrypt(apiKey);
+  try {
+    await client.query('BEGIN');
+    await archiveActiveOpenCloudKey(client, id);
+    await client.query('UPDATE noxridge_wl_users SET encrypted_key=$2,iv=$3,auth_tag=$4,updated_at=NOW() WHERE user_id=$1',
+      [id, e.body, e.iv, e.tag]);
+    await client.query(`
+      DELETE FROM noxridge_wl_open_cloud_key_history
+      WHERE user_id=$1 AND id NOT IN (
+        SELECT id FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1
+        ORDER BY created_at DESC,id DESC LIMIT 10
+      )
+    `, [id]);
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { client.release(); }
 };
 export const getWhitelistOpenCloudKeyStatus = async (id) => {
   const q = await schema(), r = await q.query('SELECT encrypted_key,updated_at FROM noxridge_wl_users WHERE user_id=$1', [id]);
   return { configured: Boolean(r.rows[0]?.encrypted_key), updatedAt: r.rows[0]?.updated_at ?? null };
 };
-export const deleteWhitelistOpenCloudKey = async (id) => {
+export const listWhitelistOpenCloudKeyHistory = async (id) => {
   const q = await schema();
-  await q.query('UPDATE noxridge_wl_users SET encrypted_key=NULL,iv=NULL,auth_tag=NULL,updated_at=NOW() WHERE user_id=$1', [id]);
+  const r = await q.query(`
+    SELECT id,key_suffix,created_at FROM noxridge_wl_open_cloud_key_history
+    WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 10
+  `, [id]);
+  return r.rows.map(row => ({
+    id: String(row.id), maskedKey: `••••••••${row.key_suffix}`, createdAt: row.created_at
+  }));
+};
+export const restoreWhitelistOpenCloudKeyHistory = async (id, historyId) => {
+  const q = await schema(), client = await q.connect();
+  try {
+    await client.query('BEGIN');
+    const found = await client.query(`
+      SELECT encrypted_key,iv,auth_tag FROM noxridge_wl_open_cloud_key_history
+      WHERE user_id=$1 AND id=$2
+    `, [id, historyId]);
+    if (!found.rows[0]) throw new AppError('Riwayat API Key tidak ditemukan untuk akun WL ini.', 404, 'API_KEY_HISTORY_NOT_FOUND');
+    await archiveActiveOpenCloudKey(client, id);
+    const old = found.rows[0];
+    await client.query('UPDATE noxridge_wl_users SET encrypted_key=$2,iv=$3,auth_tag=$4,updated_at=NOW() WHERE user_id=$1',
+      [id, old.encrypted_key, old.iv, old.auth_tag]);
+    await client.query(`
+      DELETE FROM noxridge_wl_open_cloud_key_history
+      WHERE user_id=$1 AND id NOT IN (
+        SELECT id FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1
+        ORDER BY created_at DESC,id DESC LIMIT 10
+      )
+    `, [id]);
+    await client.query('COMMIT');
+    return { restored: true };
+  } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { client.release(); }
+};
+export const deleteWhitelistOpenCloudKey = async (id) => {
+  const q = await schema(), client = await q.connect();
+  try {
+    await client.query('BEGIN');
+    await archiveActiveOpenCloudKey(client, id);
+    await client.query('UPDATE noxridge_wl_users SET encrypted_key=NULL,iv=NULL,auth_tag=NULL,updated_at=NOW() WHERE user_id=$1', [id]);
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { client.release(); }
 };
 export const resolveWhitelistOpenCloudKey = async (id) => {
   const q = await schema(), r = await q.query('SELECT encrypted_key,iv,auth_tag FROM noxridge_wl_users WHERE user_id=$1', [id]);
