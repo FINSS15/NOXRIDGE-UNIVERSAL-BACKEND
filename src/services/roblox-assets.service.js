@@ -73,6 +73,47 @@ const parseUpstream = async (response, context = {}) => {
   return data;
 };
 
+// Verify the current WL player's saved key without exposing the secret.
+export const inspectRobloxOpenCloudKey = async ({ apiKey }) => {
+  const normalizedApiKey = String(apiKey ?? '').trim();
+  if (!normalizedApiKey) throw new AppError('Saved Roblox Open Cloud key is empty.', 400, 'ROBLOX_KEY_EMPTY');
+  let response;
+  try {
+    response = await fetch('https://apis.roblox.com/api-keys/v1/introspect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: normalizedApiKey }),
+      signal: AbortSignal.timeout(20000)
+    });
+  } catch {
+    throw new AppError('Could not reach Roblox API Key introspection endpoint.', 502, 'ROBLOX_INTROSPECT_UNAVAILABLE');
+  }
+  const raw = await response.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+  if (!response.ok) {
+    return {
+      valid: false,
+      httpStatus: response.status,
+      message: String(data?.message || data?.error?.message || data?.detail || 'Roblox rejected the saved API Key.').slice(0, 240)
+    };
+  }
+  return {
+    valid: true,
+    name: typeof data.name === 'string' ? data.name : null,
+    authorizedUserId: data.authorizedUserId == null ? null : String(data.authorizedUserId),
+    enabled: data.enabled === true,
+    expired: data.expired === true,
+    expirationTimeUtc: data.expirationTimeUtc || null,
+    scopes: Array.isArray(data.scopes) ? data.scopes.map(scope => ({
+      name: String(scope?.name || ''),
+      operations: Array.isArray(scope?.operations) ? scope.operations.map(String) : [],
+      userIds: Array.isArray(scope?.userIds) ? scope.userIds.map(String) : [],
+      groupIds: Array.isArray(scope?.groupIds) ? scope.groupIds.map(String) : []
+    })) : []
+  };
+};
+
 export const createRobloxAsset = async ({
   apiKey,
   file,
