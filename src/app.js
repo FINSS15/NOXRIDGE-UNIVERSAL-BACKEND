@@ -52,7 +52,7 @@ app.use('/system', apiRateLimiter, systemRoutes);
 app.use('/auth', apiRateLimiter, authRoutes);
 app.use('/account', apiRateLimiter, accountRoutes);
 app.use('/whitelist', apiRateLimiter, whitelistRoutes);
-app.use('/assets', uploadRateLimiter, assetsRoutes);
+app.use('/assets', apiRateLimiter, assetsRoutes);
 app.use('/storage', uploadRateLimiter, storageRoutes);
 app.use('/ai', aiRateLimiter, aiRoutes);
 app.use('/upload', uploadRateLimiter, uploadRoutes);
