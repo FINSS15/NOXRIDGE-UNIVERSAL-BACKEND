@@ -97,6 +97,9 @@ router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, as
     if (!req.file) throw new AppError('No file was provided.', 400, 'FILE_REQUIRED');
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Asset metadata is invalid.', 400, 'VALIDATION_ERROR');
+    if (parsed.data.creatorType === 'user' && String(parsed.data.creatorId) !== String(req.noxridge.userId)) {
+      throw new AppError('Creator UserId must match the authenticated WL account that owns this API Key.', 400, 'CREATOR_ID_MISMATCH');
+    }
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
     // Submit to Roblox first. A private B2 archive failure must not cancel a valid
     // Roblox asset submission or make the importer report a false upload failure.
