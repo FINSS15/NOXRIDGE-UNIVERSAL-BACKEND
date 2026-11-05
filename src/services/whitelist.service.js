@@ -160,7 +160,7 @@ export const authenticateWhitelist = async (idInput, rawKey) => {
     if (!exp || Date.now() >= exp.getTime()) throw new AppError('NOXRIDGE WL access has expired.', 403, 'WL_ACCESS_EXPIRED');
   }
   await q.query(`INSERT INTO noxridge_wl_users(user_id,wl_key_hash) VALUES($1,$2)
-    ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,updated_at=NOW()`, [userId, entry.key]);
+    ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash`, [userId, entry.key]);
   let expiresAt = null;
   if (entry.trial && started) {
     const seconds = duration(entry.trial);
@@ -171,7 +171,7 @@ export const authenticateWhitelist = async (idInput, rawKey) => {
     const absoluteSeconds = absolute ? Math.floor(absolute.getTime() / 1000) : null;
     if (absoluteSeconds && (!expiresAt || absoluteSeconds < expiresAt)) expiresAt = absoluteSeconds;
   }
-  return { userId, username: String(entry.name || ''), plan: entry.trial ? 'trial' : 'whitelist', expiresAt };
+  return { userId, username: String(entry.name || ''), plan: entry.trial ? 'trial' : 'whitelist', expiresAt, wlKeyHash: entry.key.toLowerCase() };
 };
 const encrypt = (plain) => {
   if (!env.KEY_ENCRYPTION_SECRET) throw new AppError('Key vault is not configured. Set KEY_ENCRYPTION_SECRET.', 503, 'KEY_VAULT_NOT_CONFIGURED');
@@ -200,24 +200,31 @@ const archiveActiveOpenCloudKey = async (client, id) => {
     VALUES($1,$2,$3,$4,$5)
   `, [id, row.encrypted_key, row.iv, row.auth_tag, plain.slice(-8)]);
 };
-export const saveWhitelistOpenCloudKey = async (id, apiKey) => {
+export const saveWhitelistOpenCloudKey = async (id, apiKey, wlKeyHash) => {
+  const userId = String(id ?? '').trim();
   const normalizedApiKey = String(apiKey ?? '').trim();
-  if (normalizedApiKey.length < 20) throw new AppError('Roblox Open Cloud key is invalid or empty.', 400, 'ROBLOX_KEY_INVALID');
-  const q = await schema(), client = await q.connect(), e = encrypt(normalizedApiKey);
+  const normalizedWlHash = String(wlKeyHash ?? '').trim().toLowerCase();
+  if (!/^\d{1,20}$/.test(userId)) throw new AppError('WL user identity is invalid.', 401, 'WL_AUTH_INVALID');
+  if (normalizedApiKey.length < 20 || normalizedApiKey.length > 512 || /\s/.test(normalizedApiKey)) throw new AppError('Roblox Open Cloud key format is invalid. Check for spaces or line breaks.', 400, 'ROBLOX_KEY_INVALID');
+  if (!/^[a-f0-9]{24}$/.test(normalizedWlHash)) throw new AppError('Current WL identity could not be verified.', 401, 'WL_AUTH_INVALID');
+  const q = await schema();
+  const e = encrypt(normalizedApiKey);
+  const client = await q.connect();
   try {
     await client.query('BEGIN');
-    await archiveActiveOpenCloudKey(client, id);
-    const saved = await client.query('UPDATE noxridge_wl_users SET encrypted_key=$2,iv=$3,auth_tag=$4,updated_at=NOW() WHERE user_id=$1',
-      [id, e.body, e.iv, e.tag]);
-    if (saved.rowCount !== 1) throw new AppError('WL user vault record was not found; API Key was not saved.', 409, 'KEY_VAULT_USER_MISSING');
-    await client.query(`
-      DELETE FROM noxridge_wl_open_cloud_key_history
-      WHERE user_id=$1 AND id NOT IN (
-        SELECT id FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1
-        ORDER BY created_at DESC,id DESC LIMIT 10
-      )
-    `, [id]);
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [userId]);
+    await archiveActiveOpenCloudKey(client, userId);
+    const saved = await client.query(`
+      INSERT INTO noxridge_wl_users(user_id,wl_key_hash,encrypted_key,iv,auth_tag,updated_at)
+      VALUES($1,$2,$3,$4,$5,NOW())
+      ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,encrypted_key=EXCLUDED.encrypted_key,iv=EXCLUDED.iv,auth_tag=EXCLUDED.auth_tag,updated_at=NOW()
+      RETURNING user_id,updated_at
+    `, [userId, normalizedWlHash, e.body, e.iv, e.tag]);
+    if (saved.rowCount !== 1) throw new AppError('Database did not confirm the API Key save.', 503, 'KEY_VAULT_SAVE_FAILED');
+    await client.query(`DELETE FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1 AND id NOT IN (SELECT id FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 10)`, [userId]);
     await client.query('COMMIT');
+    console.info('[NOXRIDGE OPEN CLOUD KEY SAVED]', { userId, updatedAt: saved.rows[0].updated_at, keyLength: normalizedApiKey.length, keyLast4: normalizedApiKey.slice(-4) });
+    return { saved: true, userId, updatedAt: saved.rows[0].updated_at };
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
   finally { client.release(); }
 };
@@ -289,12 +296,16 @@ export const deleteWhitelistOpenCloudKey = async (id) => {
   finally { client.release(); }
 };
 export const resolveWhitelistOpenCloudKey = async (id) => {
-  const q = await schema(), r = await q.query('SELECT encrypted_key,iv,auth_tag FROM noxridge_wl_users WHERE user_id=$1', [id]);
+  const userId = String(id ?? '').trim();
+  if (!/^\d{1,20}$/.test(userId)) throw new AppError('WL user identity is invalid.', 401, 'WL_AUTH_INVALID');
+  const q = await schema(), r = await q.query('SELECT encrypted_key,iv,auth_tag FROM noxridge_wl_users WHERE user_id=$1', [userId]);
   if (!r.rows[0]?.encrypted_key) throw new AppError('Masukkan dan simpan Roblox Open Cloud API Key terlebih dahulu.', 400, 'ROBLOX_KEY_NOT_SAVED');
   try {
-    return decrypt({ encrypted_key: r.rows[0].encrypted_key, iv: r.rows[0].iv, auth_tag: r.rows[0].auth_tag }).trim();
+    const apiKey = decrypt({ encrypted_key: r.rows[0].encrypted_key, iv: r.rows[0].iv, auth_tag: r.rows[0].auth_tag }).trim();
+    if (!apiKey) throw new Error('Decrypted API key is empty.');
+    return apiKey;
   } catch (error) {
-    console.error('[NOXRIDGE KEY VAULT DECRYPT ERROR]', { userId: String(id), code: error?.code || 'DECRYPT_FAILED' });
+    console.error('[NOXRIDGE KEY VAULT DECRYPT ERROR]', { userId, code: error?.code || 'DECRYPT_FAILED' });
     throw new AppError('Saved Roblox API Key could not be decrypted. Check that KEY_ENCRYPTION_SECRET in Render is unchanged.', 500, 'KEY_VAULT_DECRYPT_FAILED');
   }
 };
