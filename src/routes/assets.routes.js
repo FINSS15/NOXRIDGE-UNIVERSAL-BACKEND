@@ -157,6 +157,73 @@ router.delete('/open-cloud-key', requireWhitelist, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+// One-click image background removal. The remove.bg secret never reaches the importer.
+router.post('/remove-background', uploadRateLimiter, requireWhitelist, uploadSingleFile, async (req, res, next) => {
+  try {
+    if (!req.file) throw new AppError('Choose an image file first.', 400, 'FILE_REQUIRED');
+    if (!env.REMOVE_BG_API_KEY) {
+      throw new AppError('Background removal is not configured on the backend. Add REMOVE_BG_API_KEY in Render Environment.', 503, 'REMOVE_BG_NOT_CONFIGURED');
+    }
+    const allowedMime = new Set(['image/png', 'image/jpeg']);
+    const extension = String(req.file.originalname || '').toLowerCase().split('.').pop();
+    if (!allowedMime.has(String(req.file.mimetype || '').toLowerCase()) || !['png', 'jpg', 'jpeg'].includes(extension)) {
+      throw new AppError('Only PNG and JPG/JPEG images can use background removal.', 415, 'IMAGE_FORMAT_UNSUPPORTED');
+    }
+    if (req.file.size > 20 * 1024 * 1024) {
+      throw new AppError('Image exceeds the 20 MB background-removal limit.', 413, 'IMAGE_TOO_LARGE');
+    }
+
+    const form = new FormData();
+    form.append('size', 'auto');
+    form.append('format', 'png');
+    form.append('image_file', new Blob([req.file.buffer], { type: req.file.mimetype }), req.file.originalname || 'image.png');
+
+    const upstream = await fetch('https://api.remove.bg/v1.0/removebg', {
+      method: 'POST',
+      headers: { 'X-Api-Key': env.REMOVE_BG_API_KEY },
+      body: form,
+      signal: AbortSignal.timeout(90000)
+    });
+
+    if (!upstream.ok) {
+      const detail = await upstream.text().catch(() => '');
+      const safeDetail = detail.replace(/[\r\n]+/g, ' ').slice(0, 240);
+      const status = upstream.status === 429 ? 429 : upstream.status === 402 ? 402 : upstream.status === 401 || upstream.status === 403 ? 502 : 502;
+      const code = upstream.status === 429 ? 'REMOVE_BG_RATE_LIMIT' : upstream.status === 402 ? 'REMOVE_BG_CREDITS_EXHAUSTED' : 'REMOVE_BG_UPSTREAM_ERROR';
+      throw new AppError(
+        upstream.status === 429
+          ? 'remove.bg rate limit reached. Please wait and try again.'
+          : upstream.status === 402
+            ? 'remove.bg credits are exhausted. Check the remove.bg account plan.'
+            : upstream.status === 401 || upstream.status === 403
+              ? 'remove.bg rejected the configured API key. Check REMOVE_BG_API_KEY in Render.'
+              : 'remove.bg could not process this image. ' + safeDetail,
+        status,
+        code
+      );
+    }
+
+    const output = Buffer.from(await upstream.arrayBuffer());
+    if (!output.length || output.length > 40 * 1024 * 1024) {
+      throw new AppError('remove.bg returned an invalid or oversized image.', 502, 'REMOVE_BG_INVALID_OUTPUT');
+    }
+    return res
+      .status(200)
+      .set({
+        'Content-Type': 'image/png',
+        'Content-Length': String(output.length),
+        'Content-Disposition': 'attachment; filename="noxridge-no-background.png"',
+        'Cache-Control': 'no-store'
+      })
+      .send(output);
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      return next(new AppError('remove.bg processing timed out. Please try again.', 504, 'REMOVE_BG_TIMEOUT'));
+    }
+    return next(error);
+  }
+});
+
 router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('No file was provided.', 400, 'FILE_REQUIRED');
