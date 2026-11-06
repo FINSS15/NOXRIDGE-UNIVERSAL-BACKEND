@@ -10,7 +10,7 @@ on:
       - main
 
 jobs:
-  syntax-check:
+  syntax-and-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -26,3 +26,6 @@ jobs:
 
       - name: Check JavaScript syntax
         run: npm run check
+
+      - name: Run Creator Store publication tests
+        run: npm test
