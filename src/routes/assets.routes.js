@@ -99,6 +99,13 @@ router.post('/open-cloud-key/diagnose', requireWhitelist, async (req, res, next)
         ownerMatchesWhitelistUser: ownerMatches,
         assetReadScopeForWhitelistUser: readScope.allowed,
         assetWriteScopeForWhitelistUser: writeScope.allowed,
+        creatorStoreWriteScope: Array.isArray(result.scopes)
+          ? result.scopes.some(scope =>
+              String(scope?.name || '').toLowerCase() === 'creator-store-product:write'
+              || (String(scope?.name || '').toLowerCase() === 'creator-store-product'
+                && Array.isArray(scope?.operations)
+                && scope.operations.some(operation => String(operation).toLowerCase() === 'write')))
+          : null,
         assetReadScopeReason: readScope.reason,
         assetWriteScopeReason: writeScope.reason
       }
