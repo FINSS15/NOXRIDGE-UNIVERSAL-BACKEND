@@ -290,7 +290,7 @@ router.get('/operations/:operationId', requireWhitelist, async (req, res, next) 
     const responsePath = typeof operationResponse?.path === 'string' ? operationResponse.path : '';
     const assetId = operationResponse?.assetId != null
       ? String(operationResponse.assetId)
-      : (responsePath.match(/(?:^|\\/)assets\\/([^/?#]+)/)?.[1] || null);
+      : (responsePath.split('?')[0].split('/').filter(Boolean).pop() || null);
     return res.set('Cache-Control', 'no-store').json({
       success: true,
       data: {
