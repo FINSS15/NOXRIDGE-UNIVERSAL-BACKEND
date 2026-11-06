@@ -149,7 +149,10 @@ export const createRobloxAsset = async ({
     assetType,
     displayName: displayName.trim(),
     description: (description || '').trim(),
-    creationContext: { creator }
+    creationContext: {
+      creator,
+      ...(assetType === 'Image' || assetType === 'Decal' ? { assetPrivacy: 'openUse' } : {})
+    }
   }));
   form.append(
     'fileContent',
@@ -202,13 +205,18 @@ export const publishRobloxCreatorStoreProduct = async ({
       message: `Creator Store auto-publication does not support ${assetType} products through this API.`
     };
   }
-  const sellerField = creatorType === 'group' ? 'groupSeller' : 'userSeller';
-  const sellerPath = creatorType === 'group'
-    ? `groups/${String(creatorId)}`
-    : `users/${String(creatorId)}`;
+  if (assetType === 'Image') {
+    return {
+      attempted: false,
+      published: false,
+      public: false,
+      openUseRequested: true,
+      status: 'open_use_requested',
+      message: 'Image upload requested Open Use privacy. Roblox moderation and asset privacy must be verified before confirming public availability.'
+    };
+  }
   const body = {
     [assetField]: String(assetId),
-    [sellerField]: sellerPath,
     published: true,
     basePrice: {
       currencyCode: 'USD',
