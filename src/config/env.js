@@ -25,7 +25,10 @@ const envSchema = z.object({
   // AI Provider
   AI_API_KEY: z.string().min(1).optional(),
   AI_BASE_URL: z.string().url().optional(),
-  AI_MODEL: z.string().min(1).optional()
+  AI_MODEL: z.string().min(1).optional(),
+
+  // remove.bg background-removal service (secret stays on backend)
+  REMOVE_BG_API_KEY: z.string().min(1).optional()
 });
 
 const result = envSchema.safeParse(process.env);
