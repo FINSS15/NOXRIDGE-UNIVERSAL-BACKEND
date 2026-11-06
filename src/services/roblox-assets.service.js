@@ -149,10 +149,7 @@ export const createRobloxAsset = async ({
     assetType,
     displayName: displayName.trim(),
     description: (description || '').trim(),
-    creationContext: {
-      creator,
-      ...(assetType === 'Image' || assetType === 'Decal' ? { assetPrivacy: 'openUse' } : {})
-    }
+    creationContext: { creator }
   }));
   form.append(
     'fileContent',
@@ -190,6 +187,15 @@ export const createRobloxAsset = async ({
 export const publishRobloxCreatorStoreProduct = async ({
   apiKey, assetId, assetType, creatorType, creatorId
 }) => {
+  if (assetType === 'Image') {
+    return {
+      attempted: false,
+      published: false,
+      public: false,
+      status: 'privacy_setting_dependent',
+      message: 'Roblox Asset Privacy controls whether newly created images default to Open Use. This API upload does not override that account or group setting; verify the asset permission before confirming public availability.'
+    };
+  }
   const fieldByType = {
     Model: 'modelAssetId',
     Audio: 'audioAssetId',
@@ -203,16 +209,6 @@ export const publishRobloxCreatorStoreProduct = async ({
       public: false,
       status: 'unsupported_asset_type',
       message: `Creator Store auto-publication does not support ${assetType} products through this API.`
-    };
-  }
-  if (assetType === 'Image') {
-    return {
-      attempted: false,
-      published: false,
-      public: false,
-      openUseRequested: true,
-      status: 'open_use_requested',
-      message: 'Image upload requested Open Use privacy. Roblox moderation and asset privacy must be verified before confirming public availability.'
     };
   }
   const body = {
