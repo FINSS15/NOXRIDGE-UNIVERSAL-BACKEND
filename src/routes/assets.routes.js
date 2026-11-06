@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { env } from '../config/env.js';
 import { z } from 'zod';
 import { requireWhitelist } from '../middleware/whitelistAuth.js';
 import { uploadSingleFile } from '../middleware/upload.js';
