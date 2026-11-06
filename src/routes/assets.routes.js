@@ -399,8 +399,8 @@ router.get('/operations/:operationId', requireWhitelist, async (req, res, next) 
           });
           await finishWhitelistAssetPublication(req.noxridge.userId, req.params.operationId, {
             status: publication.public ? 'public'
-              : publication.status === 'open_use_requested' ? 'open_use_requested'
-                : publication.attempted ? 'restricted' : 'unsupported',
+              : publication.attempted ? 'restricted'
+                : (publication.status || 'unsupported'),
             result: publication
           });
         } catch (publishError) {
