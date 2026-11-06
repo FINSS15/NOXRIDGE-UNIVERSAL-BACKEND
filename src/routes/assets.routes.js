@@ -169,8 +169,25 @@ router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, as
     // Submit to Roblox first. A private B2 archive failure must not cancel a valid
     // Roblox asset submission or make the importer report a false upload failure.
     const result = await createRobloxAsset({ apiKey, file: req.file, ...parsed.data });
-    const operationId = result?.path?.split('/').pop() || result?.operationId;
-    if (operationId) await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
+    // Roblox Create Asset returns an Operation resource path: operations/{operationId}.
+    // Normalize it for clients that expect an explicit operationId field.
+    const operationPath = typeof result?.path === 'string' ? result.path : '';
+    const operationId = result?.operationId
+      || operationPath.match(/(?:^|\\/)operations\\/([^/?#]+)/)?.[1]
+      || null;
+    if (!operationId) {
+      console.error('[NOXRIDGE ROBLOX OPERATION ID MISSING]', {
+        userId: String(req.noxridge.userId),
+        responseKeys: Object.keys(result || {}),
+        responsePath: operationPath.slice(0, 180)
+      });
+      throw new AppError(
+        'Roblox accepted the upload request but did not return a readable operation ID. Check backend logs before retrying to avoid duplicate assets.',
+        502,
+        'ROBLOX_OPERATION_MISSING'
+      );
+    }
+    await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
 
     let privateStorage = null;
     let privateStorageWarning = null;
@@ -198,7 +215,7 @@ router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, as
       message: privateStorageWarning
         ? 'Asset submitted to Roblox. Private archive storage is temporarily unavailable.'
         : 'Asset submitted to Roblox and private copy stored for this WL player when applicable.',
-      data: { ...result, privateStorage, privateStorageWarning },
+      data: { ...result, operationId, privateStorage, privateStorageWarning },
       timestamp: new Date().toISOString()
     });
   } catch (error) { return next(error); }
