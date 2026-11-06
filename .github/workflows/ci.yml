@@ -21,9 +21,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: npm install
-
+      # The syntax check and mocked Creator Store tests use only Node.js built-ins.
+      # Do not resolve/install the backend's production dependency tree in this job.
       - name: Check JavaScript syntax
         run: npm run check
 
