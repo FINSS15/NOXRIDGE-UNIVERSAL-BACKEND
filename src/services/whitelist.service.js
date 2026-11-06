@@ -36,6 +36,13 @@ const schema = async () => {
       user_id BIGINT NOT NULL, operation_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY(user_id, operation_id)
     );
+    ALTER TABLE noxridge_wl_asset_operations
+      ADD COLUMN IF NOT EXISTS asset_type TEXT,
+      ADD COLUMN IF NOT EXISTS creator_type TEXT,
+      ADD COLUMN IF NOT EXISTS creator_id TEXT,
+      ADD COLUMN IF NOT EXISTS creator_store_status TEXT NOT NULL DEFAULT 'not_requested',
+      ADD COLUMN IF NOT EXISTS creator_store_result JSONB,
+      ADD COLUMN IF NOT EXISTS creator_store_error TEXT;
     CREATE TABLE IF NOT EXISTS noxridge_wl_open_cloud_key_history (
       id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
       encrypted_key TEXT NOT NULL, iv TEXT NOT NULL, auth_tag TEXT NOT NULL,
@@ -298,9 +305,55 @@ export const resolveWhitelistOpenCloudKey = async (id) => {
     throw new AppError('Saved Roblox API Key could not be decrypted. Check that KEY_ENCRYPTION_SECRET in Render is unchanged.', 500, 'KEY_VAULT_DECRYPT_FAILED');
   }
 };
-export const saveWhitelistAssetOperation = async (id, operationId) => {
+export const saveWhitelistAssetOperation = async (id, operationId, metadata = null) => {
   const q = await schema();
-  await q.query('INSERT INTO noxridge_wl_asset_operations(user_id,operation_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [id, operationId]);
+  await q.query(`INSERT INTO noxridge_wl_asset_operations
+    (user_id,operation_id,asset_type,creator_type,creator_id,creator_store_status)
+    VALUES($1,$2,$3,$4,$5,$6)
+    ON CONFLICT(user_id,operation_id) DO UPDATE SET
+      asset_type=COALESCE(EXCLUDED.asset_type,noxridge_wl_asset_operations.asset_type),
+      creator_type=COALESCE(EXCLUDED.creator_type,noxridge_wl_asset_operations.creator_type),
+      creator_id=COALESCE(EXCLUDED.creator_id,noxridge_wl_asset_operations.creator_id)`,
+    [id, operationId, metadata?.assetType || null, metadata?.creatorType || null,
+      metadata?.creatorId == null ? null : String(metadata.creatorId),
+      metadata ? 'pending' : 'not_requested']);
+};
+export const getWhitelistAssetPublication = async (id, operationId) => {
+  const q = await schema();
+  const r = await q.query(`SELECT asset_type,creator_type,creator_id,creator_store_status,
+    creator_store_result,creator_store_error
+    FROM noxridge_wl_asset_operations WHERE user_id=$1 AND operation_id=$2`, [id, operationId]);
+  const row = r.rows[0];
+  if (!row) return null;
+  return {
+    assetType: row.asset_type,
+    creatorType: row.creator_type,
+    creatorId: row.creator_id,
+    status: row.creator_store_status,
+    result: row.creator_store_result,
+    error: row.creator_store_error
+  };
+};
+export const claimWhitelistAssetPublication = async (id, operationId) => {
+  const q = await schema();
+  const r = await q.query(`UPDATE noxridge_wl_asset_operations
+    SET creator_store_status='publishing',creator_store_error=NULL
+    WHERE user_id=$1 AND operation_id=$2 AND creator_store_status='pending'
+    RETURNING asset_type,creator_type,creator_id`, [id, operationId]);
+  if (!r.rows[0]) return null;
+  return {
+    assetType: r.rows[0].asset_type,
+    creatorType: r.rows[0].creator_type,
+    creatorId: r.rows[0].creator_id
+  };
+};
+export const finishWhitelistAssetPublication = async (id, operationId, { status, result = null, error = null }) => {
+  const q = await schema();
+  await q.query(`UPDATE noxridge_wl_asset_operations
+    SET creator_store_status=$3,creator_store_result=$4::jsonb,creator_store_error=$5
+    WHERE user_id=$1 AND operation_id=$2`,
+    [id, operationId, status, result == null ? null : JSON.stringify(result),
+      error == null ? null : String(error).slice(0,500)]);
 };
 export const assertWhitelistAssetOperationOwner = async (id, operationId) => {
   const q = await schema(), r = await q.query('SELECT 1 FROM noxridge_wl_asset_operations WHERE user_id=$1 AND operation_id=$2', [id, operationId]);
