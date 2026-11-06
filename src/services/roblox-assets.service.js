@@ -143,13 +143,14 @@ export const createRobloxAsset = async ({
   const keyMeta = safeKeyMeta(normalizedApiKey);
 
   const form = new FormData();
-  // Roblox expects the request part as application/json, not a plain text form field.
-  form.append('request', new Blob([JSON.stringify({
+  // Roblox's Create Asset example sends `request` as a regular multipart text field
+  // containing JSON (not as a separate application/json file/blob part).
+  form.append('request', JSON.stringify({
     assetType,
     displayName: displayName.trim(),
     description: (description || '').trim(),
     creationContext: { creator }
-  })], { type: 'application/json' }));
+  }));
   form.append(
     'fileContent',
     new Blob([file.buffer], { type: contentType }),
