@@ -106,6 +106,13 @@ router.post('/open-cloud-key/diagnose', requireWhitelist, async (req, res, next)
                 && Array.isArray(scope?.operations)
                 && scope.operations.some(operation => String(operation).toLowerCase() === 'write')))
           : null,
+        creatorStoreReadScope: Array.isArray(result.scopes)
+          ? result.scopes.some(scope =>
+              String(scope?.name || '').toLowerCase() === 'creator-store-product:read'
+              || (String(scope?.name || '').toLowerCase() === 'creator-store-product'
+                && Array.isArray(scope?.operations)
+                && scope.operations.some(operation => String(operation).toLowerCase() === 'read')))
+          : null,
         assetReadScopeReason: readScope.reason,
         assetWriteScopeReason: writeScope.reason
       }
@@ -391,7 +398,9 @@ router.get('/operations/:operationId', requireWhitelist, async (req, res, next) 
             ...claimed
           });
           await finishWhitelistAssetPublication(req.noxridge.userId, req.params.operationId, {
-            status: publication.public ? 'public' : publication.attempted ? 'restricted' : 'unsupported',
+            status: publication.public ? 'public'
+              : publication.status === 'open_use_requested' ? 'open_use_requested'
+                : publication.attempted ? 'restricted' : 'unsupported',
             result: publication
           });
         } catch (publishError) {
