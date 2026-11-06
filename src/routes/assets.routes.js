@@ -173,7 +173,7 @@ router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, as
     // Normalize it for clients that expect an explicit operationId field.
     const operationPath = typeof result?.path === 'string' ? result.path : '';
     const operationId = result?.operationId
-      || operationPath.match(/(?:^|\\/)operations\\/([^/?#]+)/)?.[1]
+      || operationPath.split('?')[0].split('/').filter(Boolean).pop()
       || null;
     if (!operationId) {
       console.error('[NOXRIDGE ROBLOX OPERATION ID MISSING]', {
@@ -284,7 +284,23 @@ router.get('/operations/:operationId', requireWhitelist, async (req, res, next) 
     await assertWhitelistAssetOperationOwner(req.noxridge.userId, req.params.operationId);
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
     const result = await getRobloxAssetOperation({ apiKey, operationId: req.params.operationId });
-    return res.json({ success: true, data: result });
+    const operationResponse = result?.response && typeof result.response === 'object'
+      ? result.response
+      : null;
+    const responsePath = typeof operationResponse?.path === 'string' ? operationResponse.path : '';
+    const assetId = operationResponse?.assetId != null
+      ? String(operationResponse.assetId)
+      : (responsePath.match(/(?:^|\\/)assets\\/([^/?#]+)/)?.[1] || null);
+    return res.set('Cache-Control', 'no-store').json({
+      success: true,
+      data: {
+        ...result,
+        operationId: req.params.operationId,
+        done: typeof result?.done === 'boolean' ? result.done : null,
+        assetId,
+        operationError: result?.error || null
+      }
+    });
   } catch (error) { return next(error); }
 });
 
