@@ -177,6 +177,84 @@ export const createRobloxAsset = async ({
   });
 };
 
+
+/**
+ * Publish supported uploaded assets as free Creator Store products.
+ * Roblox's Creator Store API supports Model, Audio and Decal products.
+ * "published" is the seller's distribution intent; "purchasable" and
+ * restrictions are checked separately before reporting public availability.
+ */
+export const publishRobloxCreatorStoreProduct = async ({
+  apiKey, assetId, assetType, creatorType, creatorId
+}) => {
+  const fieldByType = {
+    Model: 'modelAssetId',
+    Audio: 'audioAssetId',
+    Decal: 'decalAssetId'
+  };
+  const assetField = fieldByType[assetType];
+  if (!assetField) {
+    return {
+      attempted: false,
+      published: false,
+      public: false,
+      status: 'unsupported_asset_type',
+      message: `Creator Store auto-publication does not support ${assetType} products through this API.`
+    };
+  }
+  const sellerField = creatorType === 'group' ? 'groupSeller' : 'userSeller';
+  const sellerPath = creatorType === 'group'
+    ? `groups/${String(creatorId)}`
+    : `users/${String(creatorId)}`;
+  const body = {
+    [assetField]: String(assetId),
+    [sellerField]: sellerPath,
+    published: true,
+    basePrice: {
+      currencyCode: 'USD',
+      quantity: { significand: 0, exponent: 0 }
+    }
+  };
+  let response;
+  try {
+    response = await fetch('https://apis.roblox.com/cloud/v2/creator-store-products', {
+      method: 'POST',
+      headers: {
+        'x-api-key': String(apiKey ?? '').trim(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000)
+    });
+  } catch {
+    throw new AppError('Could not reach Roblox Creator Store API.', 502, 'ROBLOX_CREATOR_STORE_UNAVAILABLE');
+  }
+  const product = await parseUpstream(response, {
+    assetId: String(assetId),
+    assetType,
+    creatorType,
+    creatorId: String(creatorId),
+    action: 'creator_store_publish'
+  });
+  const restrictions = Array.isArray(product?.restrictions) ? product.restrictions : [];
+  const isPublic = product?.published === true
+    && product?.purchasable === true
+    && restrictions.length === 0;
+  return {
+    attempted: true,
+    published: product?.published === true,
+    purchasable: product?.purchasable === true,
+    public: isPublic,
+    status: isPublic ? 'public' : 'submitted_or_restricted',
+    creatorStoreProductId: product?.path?.split('/').filter(Boolean).pop() || null,
+    creatorStoreProductPath: product?.path || null,
+    restrictions,
+    message: isPublic
+      ? 'Creator Store confirms this product is published and purchasable.'
+      : 'Creator Store product was created, but Roblox has not confirmed public purchasability.'
+  };
+};
+
 export const getRobloxAssetOperation = async ({ apiKey, operationId }) => {
   let response;
   try {
