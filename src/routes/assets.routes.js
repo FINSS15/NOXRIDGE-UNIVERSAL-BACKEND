@@ -59,23 +59,44 @@ router.get('/open-cloud-key/reveal', requireWhitelist, async (req, res, next) =>
   } catch (error) { return next(error); }
 });
 
+const inspectAssetScope = (scopes, operation, creatorType, creatorId) => {
+  if (!Array.isArray(scopes)) return { allowed: null, reason: 'Scopes array tidak dikirim Roblox.' };
+  const op = String(operation).toLowerCase();
+  const candidates = scopes.filter(scope => {
+    const name = String(scope?.name || '').toLowerCase();
+    const ops = Array.isArray(scope?.operations) ? scope.operations.map(value => String(value).toLowerCase()) : [];
+    return ((name === 'asset' || name === 'assets') && ops.includes(op)) || name === 'asset:' + op || name === 'assets:' + op;
+  });
+  if (!candidates.length) return { allowed: false, reason: 'Scope asset ' + op + ' tidak ditemukan.' };
+  const field = creatorType === 'group' ? 'groupIds' : 'userIds';
+  let targetUnknown = false;
+  for (const scope of candidates) {
+    const targets = scope?.[field];
+    if (!Array.isArray(targets)) { targetUnknown = true; continue; }
+    if (targets.some(value => String(value) === '*' || String(value) === String(creatorId))) {
+      return { allowed: true, reason: 'Scope dan creator target cocok.' };
+    }
+  }
+  if (targetUnknown) return { allowed: null, reason: 'Scope ada, tetapi detail target ' + field + ' tidak dikirim Roblox.' };
+  return { allowed: false, reason: 'Scope ada, tetapi tidak mencakup creator ID ini.' };
+};
+
 router.post('/open-cloud-key/diagnose', requireWhitelist, async (req, res, next) => {
   try {
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
     const result = await inspectRobloxOpenCloudKey({ apiKey });
-    const ownerMatches = result.authorizedUserId == null
-      ? null
-      : String(result.authorizedUserId) === String(req.noxridge.userId);
-    const assetWriteScope = result.scopes?.some(scope =>
-      scope.name === 'asset' && scope.operations.includes('write') &&
-      (scope.userIds.includes('*') || scope.userIds.includes(String(req.noxridge.userId)))
-    ) || false;
-    return res.json({
+    const ownerMatches = result.authorizedUserId == null ? null : String(result.authorizedUserId) === String(req.noxridge.userId);
+    const readScope = inspectAssetScope(result.scopes, 'read', 'user', req.noxridge.userId);
+    const writeScope = inspectAssetScope(result.scopes, 'write', 'user', req.noxridge.userId);
+    return res.set('Cache-Control', 'no-store').json({
       success: true,
       data: {
         ...result,
         ownerMatchesWhitelistUser: ownerMatches,
-        assetWriteScopeForWhitelistUser: assetWriteScope
+        assetReadScopeForWhitelistUser: readScope.allowed,
+        assetWriteScopeForWhitelistUser: writeScope.allowed,
+        assetReadScopeReason: readScope.reason,
+        assetWriteScopeReason: writeScope.reason
       }
     });
   } catch (error) { return next(error); }
