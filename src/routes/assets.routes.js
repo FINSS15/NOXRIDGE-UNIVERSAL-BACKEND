@@ -12,10 +12,13 @@ import {
   deleteWhitelistOpenCloudKey,
   resolveWhitelistOpenCloudKey,
   saveWhitelistAssetOperation,
+  getWhitelistAssetPublication,
+  claimWhitelistAssetPublication,
+  finishWhitelistAssetPublication,
   assertWhitelistAssetOperationOwner,
   recordWhitelistStorageObject
 } from '../services/whitelist.service.js';
-import { createRobloxAsset, getRobloxAssetOperation, inspectRobloxOpenCloudKey } from '../services/roblox-assets.service.js';
+import { createRobloxAsset, getRobloxAssetOperation, inspectRobloxOpenCloudKey, publishRobloxCreatorStoreProduct } from '../services/roblox-assets.service.js';
 import { AppError } from '../utils/errors.js';
 import { transformAudio } from '../services/audio-transform.service.js';
 import { processUpload } from '../services/upload.service.js';
@@ -255,7 +258,11 @@ router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, as
         'ROBLOX_OPERATION_MISSING'
       );
     }
-    await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
+    await saveWhitelistAssetOperation(req.noxridge.userId, operationId, {
+      assetType: parsed.data.assetType,
+      creatorType: parsed.data.creatorType,
+      creatorId: parsed.data.creatorId
+    });
 
     let privateStorage = null;
     let privateStorageWarning = null;
@@ -326,7 +333,11 @@ router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFi
     });
     const operationId = robloxResult?.path?.split('/').pop() || robloxResult?.operationId;
     if (!operationId) throw new AppError('Roblox did not return an operation ID for the processed audio.', 502, 'ROBLOX_OPERATION_MISSING');
-    await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
+    await saveWhitelistAssetOperation(req.noxridge.userId, operationId, {
+      assetType: 'Audio',
+      creatorType: parsed.data.creatorType,
+      creatorId: parsed.data.creatorId
+    });
     return res.status(202).json({
       success: true,
       message: 'Audio processed, saved to this WL player private storage, and submitted to Roblox.',
@@ -359,6 +370,32 @@ router.get('/operations/:operationId', requireWhitelist, async (req, res, next) 
     const assetId = operationResponse?.assetId != null
       ? String(operationResponse.assetId)
       : (responsePath.split('?')[0].split('/').filter(Boolean).pop() || null);
+
+    // Auto-publish only after Roblox confirms the upload operation is complete.
+    // Publication errors never turn a successful asset upload into an upload failure.
+    let creatorStore = await getWhitelistAssetPublication(req.noxridge.userId, req.params.operationId);
+    if (result?.done === true && assetId && creatorStore?.status === 'pending') {
+      const claimed = await claimWhitelistAssetPublication(req.noxridge.userId, req.params.operationId);
+      if (claimed) {
+        try {
+          const publication = await publishRobloxCreatorStoreProduct({
+            apiKey,
+            assetId,
+            ...claimed
+          });
+          await finishWhitelistAssetPublication(req.noxridge.userId, req.params.operationId, {
+            status: publication.public ? 'public' : publication.attempted ? 'restricted' : 'unsupported',
+            result: publication
+          });
+        } catch (publishError) {
+          await finishWhitelistAssetPublication(req.noxridge.userId, req.params.operationId, {
+            status: 'failed',
+            error: publishError?.message || 'Creator Store publication failed.'
+          });
+        }
+        creatorStore = await getWhitelistAssetPublication(req.noxridge.userId, req.params.operationId);
+      }
+    }
     return res.set('Cache-Control', 'no-store').json({
       success: true,
       data: {
@@ -366,7 +403,12 @@ router.get('/operations/:operationId', requireWhitelist, async (req, res, next) 
         operationId: req.params.operationId,
         done: typeof result?.done === 'boolean' ? result.done : null,
         assetId,
-        operationError: result?.error || null
+        operationError: result?.error || null,
+        creatorStorePublication: creatorStore ? {
+          status: creatorStore.status,
+          result: creatorStore.result,
+          error: creatorStore.error
+        } : null
       }
     });
   } catch (error) { return next(error); }
