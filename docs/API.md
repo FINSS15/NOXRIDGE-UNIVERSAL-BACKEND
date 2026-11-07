@@ -88,9 +88,11 @@ Verify API Key
 
 GET /auth/verify
 
-Required header:
+Required headers:
 
-"x-api-key: YOUR_API_KEY"
+"x-noxridge-user-id: ROBLOX_USER_ID"
+
+"x-noxridge-wl-key: PLAYER_WL_KEY"
 
 Verify Master Key
 
@@ -135,7 +137,7 @@ Conversation history example:
   ]
 }
 
-The AI service uses Google Gemini 3.1 Flash Lite through Google's OpenAI-compatible endpoint. Required authentication headers are x-api-key plus x-noxridge-user-id and x-noxridge-wl-key. Gemini's API key is stored only in Render as GEMINI_API_KEY. PostgreSQL is required for persistent quota enforcement. The service enforces 9 chats per WL player per day, 450 requests globally per day, and 12 requests globally per minute. The daily quota date follows midnight Pacific time. There is no paid-provider fallback. A successful response includes remaining player and global quota in the quota object.
+The AI service uses Google Gemini 3.1 Flash Lite through Google's OpenAI-compatible endpoint. Required authentication headers are x-noxridge-user-id and x-noxridge-wl-key. Gemini's API key is stored only in Render as GEMINI_API_KEY. PostgreSQL is required for persistent quota enforcement. The service enforces 9 chats per WL player per day, 450 requests globally per day, and 12 requests globally per minute. The daily quota date follows midnight Pacific time. There is no paid-provider fallback. A successful response includes remaining player and global quota in the quota object.
 
 8. File Upload API
 
