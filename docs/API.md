@@ -88,11 +88,9 @@ Verify API Key
 
 GET /auth/verify
 
-Required headers:
+Required header:
 
-"x-noxridge-user-id: ROBLOX_USER_ID"
-
-"x-noxridge-wl-key: PLAYER_WL_KEY"
+"x-api-key: YOUR_API_KEY"
 
 Verify Master Key
 
@@ -106,9 +104,11 @@ Required header:
 
 POST /ai/chat
 
-Required header:
+Required headers:
 
-"x-api-key: YOUR_API_KEY"
+"x-noxridge-user-id: ROBLOX_USER_ID"
+
+"x-noxridge-wl-key: PLAYER_WL_KEY"
 
 Content-Type:
 
