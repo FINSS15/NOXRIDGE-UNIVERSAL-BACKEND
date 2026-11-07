@@ -14,7 +14,7 @@ import storageRoutes from './routes/storage.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 
-import { apiRateLimiter, aiRateLimiter, uploadRateLimiter } from './middleware/rateLimit.js';
+import { apiRateLimiter, uploadRateLimiter } from './middleware/rateLimit.js';
 import notFound from './middleware/notFound.js';
 import errorHandler from './middleware/errorHandler.js';
 
@@ -54,7 +54,7 @@ app.use('/account', apiRateLimiter, accountRoutes);
 app.use('/whitelist', apiRateLimiter, whitelistRoutes);
 app.use('/assets', apiRateLimiter, assetsRoutes);
 app.use('/storage', uploadRateLimiter, storageRoutes);
-app.use('/ai', aiRateLimiter, aiRoutes);
+app.use('/ai', aiRoutes);
 app.use('/upload', uploadRateLimiter, uploadRoutes);
 
 app.use(notFound);
