@@ -16,7 +16,7 @@
 - Node.js 22 or newer
 - npm
 - Backblaze B2 credentials for upload functionality
-- An OpenAI-compatible AI provider for AI chat functionality
+- A Google Gemini API key for AI chat functionality (Free Tier; no paid fallback)
 
 ## Local setup
 
