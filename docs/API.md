@@ -135,7 +135,7 @@ Conversation history example:
   ]
 }
 
-The AI service requires a configured OpenAI-compatible provider.
+The AI service uses Google Gemini 3.1 Flash Lite through Google's OpenAI-compatible endpoint. Required authentication headers are x-api-key plus x-noxridge-user-id and x-noxridge-wl-key. Gemini's API key is stored only in Render as GEMINI_API_KEY. PostgreSQL is required for persistent quota enforcement. The service enforces 9 chats per WL player per day, 450 requests globally per day, and 12 requests globally per minute. The daily quota date follows midnight Pacific time. There is no paid-provider fallback. A successful response includes remaining player and global quota in the quota object.
 
 8. File Upload API
 
