@@ -22,7 +22,10 @@ const envSchema = z.object({
   B2_KEY_ID: z.string().min(1).optional(),
   B2_APPLICATION_KEY: z.string().min(1).optional(),
 
-  // AI Provider
+  // Gemini AI provider (Free Tier only; no paid fallback)
+  GEMINI_API_KEY: z.string().min(1).optional(),
+
+  // Legacy OpenAI-compatible provider settings retained for compatibility; AI chat uses Gemini only.
   AI_API_KEY: z.string().min(1).optional(),
   AI_BASE_URL: z.string().url().optional(),
   AI_MODEL: z.string().min(1).optional(),

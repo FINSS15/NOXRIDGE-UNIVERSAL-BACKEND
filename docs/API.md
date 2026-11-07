@@ -104,9 +104,11 @@ Required header:
 
 POST /ai/chat
 
-Required header:
+Required headers:
 
-"x-api-key: YOUR_API_KEY"
+"x-noxridge-user-id: ROBLOX_USER_ID"
+
+"x-noxridge-wl-key: PLAYER_WL_KEY"
 
 Content-Type:
 
@@ -135,7 +137,7 @@ Conversation history example:
   ]
 }
 
-The AI service requires a configured OpenAI-compatible provider.
+The AI service uses Google Gemini 3.1 Flash Lite through Google's OpenAI-compatible endpoint. Required authentication headers are x-noxridge-user-id and x-noxridge-wl-key. Gemini's API key is stored only in Render as GEMINI_API_KEY. PostgreSQL is required for persistent quota enforcement. The service enforces 9 chats per WL player per day, 450 requests globally per day, and 12 requests globally per minute. The daily quota date follows midnight Pacific time. There is no paid-provider fallback. A successful response includes remaining player and global quota in the quota object.
 
 8. File Upload API
 
@@ -179,7 +181,7 @@ General API| 100 requests / 15 minutes
 AI Chat| 20 requests / 15 minutes
 Upload| 10 requests / 15 minutes
 
-Limits are applied per client IP using the configured Express rate limiter.
+General API and upload limits use the configured Express rate limiter. AI quotas are stored in PostgreSQL and enforced per authenticated Roblox UserId plus global daily and rolling-minute limits.
 
 10. Environment Variables
 
