@@ -181,7 +181,7 @@ General API| 100 requests / 15 minutes
 AI Chat| 20 requests / 15 minutes
 Upload| 10 requests / 15 minutes
 
-Limits are applied per client IP using the configured Express rate limiter.
+General API and upload limits use the configured Express rate limiter. AI quotas are stored in PostgreSQL and enforced per authenticated Roblox UserId plus global daily and rolling-minute limits.
 
 10. Environment Variables
 
