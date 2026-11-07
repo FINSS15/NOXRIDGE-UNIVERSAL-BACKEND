@@ -39,10 +39,16 @@ const ensureSchema = async () => {
         request_count INTEGER NOT NULL DEFAULT 0 CHECK (request_count >= 0),
         PRIMARY KEY (usage_date, user_id)
       );
-      CREATE TABLE IF NOT EXISTS noxridge_ai_minute_usage (
-        minute_bucket TIMESTAMPTZ PRIMARY KEY,
-        request_count INTEGER NOT NULL DEFAULT 0 CHECK (request_count >= 0)
+      CREATE TABLE IF NOT EXISTS noxridge_ai_rate_guard (
+        guard_id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (guard_id = TRUE)
       );
+      INSERT INTO noxridge_ai_rate_guard(guard_id) VALUES(TRUE) ON CONFLICT(guard_id) DO NOTHING;
+      CREATE TABLE IF NOT EXISTS noxridge_ai_request_log (
+        id BIGSERIAL PRIMARY KEY,
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS noxridge_ai_request_log_requested_at_idx
+        ON noxridge_ai_request_log(requested_at);
     `);
   }
   try {
@@ -54,12 +60,16 @@ const ensureSchema = async () => {
   return getPool();
 };
 
-const getPacificDate = (date = new Date()) => new Intl.DateTimeFormat('en-CA', {
-  timeZone: TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit'
-}).format(date);
+const getPacificDate = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
 
 export const reserveAiChatQuota = async (userId) => {
   if (!/^\d{1,20}$/.test(String(userId || ''))) {
@@ -70,7 +80,6 @@ export const reserveAiChatQuota = async (userId) => {
   const client = await db.connect();
   const now = new Date();
   const usageDate = getPacificDate(now);
-  const minuteBucket = new Date(Math.floor(now.getTime() / 60000) * 60000);
 
   try {
     await client.query('BEGIN');
@@ -107,14 +116,10 @@ export const reserveAiChatQuota = async (userId) => {
       );
     }
 
-    await client.query(
-      'INSERT INTO noxridge_ai_minute_usage(minute_bucket,request_count) VALUES($1,0) ON CONFLICT(minute_bucket) DO NOTHING',
-      [minuteBucket]
-    );
-    const minuteUsage = await client.query(
-      'SELECT request_count FROM noxridge_ai_minute_usage WHERE minute_bucket=$1 FOR UPDATE',
-      [minuteBucket]
-    );
+    // Serialize the rolling 60-second counter across all backend instances.
+    await client.query('SELECT guard_id FROM noxridge_ai_rate_guard WHERE guard_id=TRUE FOR UPDATE');
+    await client.query("DELETE FROM noxridge_ai_request_log WHERE requested_at < NOW() - INTERVAL '60 seconds'");
+    const minuteUsage = await client.query('SELECT COUNT(*)::INTEGER AS request_count FROM noxridge_ai_request_log');
     if (Number(minuteUsage.rows[0].request_count) >= GLOBAL_PER_MINUTE_LIMIT) {
       throw new AppError(
         'NOXRIDGE AI is busy. The free-tier request rate is temporarily full; wait a minute and try again.',
@@ -131,10 +136,7 @@ export const reserveAiChatQuota = async (userId) => {
       'UPDATE noxridge_ai_player_daily_usage SET request_count=request_count+1 WHERE usage_date=$1 AND user_id=$2',
       [usageDate, String(userId)]
     );
-    await client.query(
-      'UPDATE noxridge_ai_minute_usage SET request_count=request_count+1 WHERE minute_bucket=$1',
-      [minuteBucket]
-    );
+    await client.query('INSERT INTO noxridge_ai_request_log(requested_at) VALUES(NOW())');
 
     await client.query('COMMIT');
 
