@@ -294,6 +294,9 @@ router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFi
     if (!req.file) throw new AppError('Choose an audio source file you own or are authorized to use.', 400, 'AUDIO_FILE_REQUIRED');
     const parsed = bypassMusicSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Music processing settings are invalid.', 400, 'VALIDATION_ERROR');
+    if (parsed.data.creatorType === 'user' && String(parsed.data.creatorId) !== String(req.noxridge.userId)) {
+      throw new AppError('Creator UserId must match the authenticated WL account that owns this API Key.', 400, 'CREATOR_ID_MISMATCH');
+    }
     const apiKey = await resolveWhitelistOpenCloudKey(req.noxridge.userId);
     const processedBuffer = await transformAudio({
       buffer: req.file.buffer,
@@ -302,19 +305,9 @@ router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFi
       volume: parsed.data.volume
     });
     const safeBaseName = parsed.data.displayName.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 40) || 'NOXRIDGE_MUSIC';
-    const privateCopy = await processUpload({
-      buffer: processedBuffer,
-      originalname: `${safeBaseName}.mp3`,
-      mimetype: 'audio/mpeg'
-    }, 'music', req.noxridge.userId);
-    const privateRecord = await recordWhitelistStorageObject({
-      userId: req.noxridge.userId,
-      key: privateCopy.key,
-      filename: privateCopy.filename,
-      category: 'music',
-      contentType: privateCopy.contentType,
-      size: privateCopy.size
-    });
+
+    // Submit to Roblox before attempting the optional private B2 archive.
+    // A B2 outage must not turn a successful Roblox submission into a failed upload.
     const robloxResult = await createRobloxAsset({
       apiKey,
       file: { buffer: processedBuffer, originalname: `${safeBaseName}.mp3` },
@@ -324,16 +317,50 @@ router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFi
       creatorType: parsed.data.creatorType,
       creatorId: parsed.data.creatorId
     });
-    const operationId = robloxResult?.path?.split('/').pop() || robloxResult?.operationId;
-    if (!operationId) throw new AppError('Roblox did not return an operation ID for the processed audio.', 502, 'ROBLOX_OPERATION_MISSING');
+    const operationPath = typeof robloxResult?.path === 'string' ? robloxResult.path : '';
+    const operationId = robloxResult?.operationId
+      || operationPath.split('?')[0].split('/').filter(Boolean).pop()
+      || null;
+    if (!operationId) {
+      throw new AppError('Roblox accepted the processed audio request but did not return a readable operation ID. Check backend logs before retrying.', 502, 'ROBLOX_OPERATION_MISSING');
+    }
     await saveWhitelistAssetOperation(req.noxridge.userId, operationId);
+
+    let privateRecord = null;
+    let privateStorageWarning = null;
+    try {
+      const privateCopy = await processUpload({
+        buffer: processedBuffer,
+        originalname: `${safeBaseName}.mp3`,
+        mimetype: 'audio/mpeg'
+      }, 'music', req.noxridge.userId);
+      privateRecord = await recordWhitelistStorageObject({
+        userId: req.noxridge.userId,
+        key: privateCopy.key,
+        filename: privateCopy.filename,
+        category: 'music',
+        contentType: privateCopy.contentType,
+        size: privateCopy.size
+      });
+    } catch (storageError) {
+      console.error('[NOXRIDGE BYPASS PRIVATE ARCHIVE ERROR]', {
+        userId: String(req.noxridge.userId),
+        code: storageError?.code || 'PRIVATE_STORAGE_FAILED',
+        message: String(storageError?.message || 'Unknown storage error').slice(0, 180)
+      });
+      privateStorageWarning = 'Roblox upload submitted, but private B2 archive storage failed. The Roblox operation is still available to check.';
+    }
+
     return res.status(202).json({
       success: true,
-      message: 'Audio processed, saved to this WL player private storage, and submitted to Roblox.',
+      message: privateStorageWarning
+        ? 'Audio processed and submitted to Roblox. Private B2 archive storage is temporarily unavailable.'
+        : 'Audio processed, saved to this WL player private storage, and submitted to Roblox.',
       data: {
         operationId,
         roblox: robloxResult,
         privateStorage: privateRecord,
+        privateStorageWarning,
         processing: {
           mode: parsed.data.mode,
           speed: parsed.data.speed,
