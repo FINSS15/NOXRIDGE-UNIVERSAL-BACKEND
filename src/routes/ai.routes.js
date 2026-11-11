@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { requireWhitelist } from '../middleware/whitelistAuth.js';
+import { requireWhitelist, requireWhitelistFeature } from '../middleware/whitelistAuth.js';
 import { aiChatSchema } from '../utils/validators.js';
 import { sendAIMessage } from '../services/ai.service.js';
 import { AppError } from '../utils/errors.js';
@@ -8,7 +8,7 @@ import { AppError } from '../utils/errors.js';
 const router = Router();
 
 // AI uses the existing per-player NOXRIDGE WL identity; no shared client-side API key is required.
-router.post('/chat', requireWhitelist, async (req, res, next) => {
+router.post('/chat', requireWhitelist, requireWhitelistFeature('ai_chat'), async (req, res, next) => {
   try {
     const validation = aiChatSchema.safeParse(req.body);
 
