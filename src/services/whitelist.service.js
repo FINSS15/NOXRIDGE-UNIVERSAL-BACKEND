@@ -387,7 +387,7 @@ export const WHITELIST_FEATURES = [
 export const updateWhitelistUserPermissions = async (userId, permissions) => {
   const q = await schema();
   await ensureLegacyMigration(q);
-  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   const mode = permissions?.mode === 'all' ? 'all' : 'custom';
   const features = Object.fromEntries(WHITELIST_FEATURES.map(key => [key, mode === 'all' ? true : permissions?.features?.[key] === true]));
   const result = await q.query(
