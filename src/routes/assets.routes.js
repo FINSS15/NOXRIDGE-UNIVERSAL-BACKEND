@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { env } from '../config/env.js';
 import { z } from 'zod';
-import { requireWhitelist } from '../middleware/whitelistAuth.js';
+import { requireWhitelist, requireWhitelistFeature } from '../middleware/whitelistAuth.js';
 import { uploadSingleFile } from '../middleware/upload.js';
 import { uploadRateLimiter } from '../middleware/rateLimit.js';
 import {
@@ -225,7 +225,7 @@ router.post('/remove-background', uploadRateLimiter, requireWhitelist, uploadSin
   }
 });
 
-router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, async (req, res, next) => {
+router.post('/upload', uploadRateLimiter, requireWhitelist, (req, res, next) => {\n  const type = String(req.body?.assetType || '');\n  const feature = type === 'Image' || type === 'Decal' ? 'image_upload' : type === 'Audio' ? 'music_upload' : 'model_upload';\n  return requireWhitelistFeature(feature)(req, res, next);\n}, uploadSingleFile, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('No file was provided.', 400, 'FILE_REQUIRED');
     const parsed = createSchema.safeParse(req.body);
@@ -289,7 +289,7 @@ router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, as
   } catch (error) { return next(error); }
 });
 
-router.post('/bypass-music', uploadRateLimiter, requireWhitelist, uploadSingleFile, async (req, res, next) => {
+router.post('/bypass-music', uploadRateLimiter, requireWhitelist, requireWhitelistFeature('music_bypass'), uploadSingleFile, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('Choose an audio source file you own or are authorized to use.', 400, 'AUDIO_FILE_REQUIRED');
     const parsed = bypassMusicSchema.safeParse(req.body);
