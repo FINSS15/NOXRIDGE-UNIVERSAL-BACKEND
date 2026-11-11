@@ -225,7 +225,7 @@ router.post('/remove-background', uploadRateLimiter, requireWhitelist, uploadSin
   }
 });
 
-router.post('/upload', uploadRateLimiter, requireWhitelist, (req, res, next) => {\n  const type = String(req.body?.assetType || '');\n  const feature = type === 'Image' || type === 'Decal' ? 'image_upload' : type === 'Audio' ? 'music_upload' : 'model_upload';\n  return requireWhitelistFeature(feature)(req, res, next);\n}, uploadSingleFile, async (req, res, next) => {
+router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, (req, res, next) => {\n  const type = String(req.body?.assetType || '');\n  const feature = type === 'Image' || type === 'Decal' ? 'image_upload' : type === 'Audio' ? 'music_upload' : 'model_upload';\n  return requireWhitelistFeature(feature)(req, res, next);\n}, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('No file was provided.', 400, 'FILE_REQUIRED');
     const parsed = createSchema.safeParse(req.body);
