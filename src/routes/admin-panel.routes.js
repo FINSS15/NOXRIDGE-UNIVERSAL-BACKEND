@@ -7,8 +7,7 @@ import {
   removeWhitelistUser,
   updateWhitelistConfig,
   updateWhitelistUserPermissions,
-  WHITELIST_FEATURES
-} from '../services/whitelist.service.js';
+  WHITELIST_FEATURES,\n  listWhitelistBlacklist,\n  addWhitelistBlacklist,\n  removeWhitelistBlacklist\n} from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
 
 const router = Router();
@@ -62,6 +61,29 @@ router.put('/users/:userId/permissions', async (req, res, next) => {
     const data = await updateWhitelistUserPermissions(req.params.userId, parsed.data);
     return res.json({ success: true, data });
   } catch (error) { return next(error); }
+});
+
+router.get('/blacklist', async (req, res, next) => {
+  try { return res.json({ success: true, data: await listWhitelistBlacklist() }); }
+  catch (error) { return next(error); }
+});
+
+router.post('/blacklist', async (req, res, next) => {
+  try {
+    const parsed = z.object({
+      userId: z.string().regex(/^\\d{1,20}$/),
+      username: z.string().trim().max(64).optional().default('UNKNOWN'),
+      reason: z.string().trim().min(1).max(500)
+    }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Data blacklist tidak valid.', 400, 'VALIDATION_ERROR');
+    const data = await addWhitelistBlacklist({ ...parsed.data, bannedBy: req.noxridge.userId });
+    return res.status(201).json({ success: true, data });
+  } catch (error) { return next(error); }
+});
+
+router.delete('/blacklist/:userId', async (req, res, next) => {
+  try { return res.json({ success: true, data: await removeWhitelistBlacklist(req.params.userId) }); }
+  catch (error) { return next(error); }
 });
 
 router.delete('/users/:userId', async (req, res, next) => {
