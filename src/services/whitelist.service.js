@@ -28,7 +28,7 @@ const schema = async () => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE TABLE IF NOT EXISTS noxridge_wl_settings (
+    CREATE TABLE IF NOT EXISTS noxridge_wl_blacklist (\n      user_id BIGINT PRIMARY KEY, username VARCHAR(64) NOT NULL DEFAULT 'UNKNOWN',\n      reason VARCHAR(500) NOT NULL DEFAULT 'Blacklisted by NOXRIDGE owner',\n      banned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), banned_by BIGINT NOT NULL\n    );\n    CREATE TABLE IF NOT EXISTS noxridge_wl_settings (
       setting_key TEXT PRIMARY KEY,
       value JSONB NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -141,10 +141,8 @@ const expiryWib = (value) => {
 export const authenticateWhitelist = async (idInput, rawKey) => {
   const userId = String(idInput || '').trim();
   if (!/^\d{1,20}$/.test(userId) || !rawKey || String(rawKey).length > 256) throw new AppError('WL identity is invalid.', 401, 'WL_AUTH_INVALID');
-  const data = await getWhitelist();
-  const entry = data.whitelist.find(v => String(v?.id ?? '') === userId);
+  const q = await schema();\n  const banned = await q.query('SELECT reason FROM noxridge_wl_blacklist WHERE user_id=$1', [userId]);\n  if (banned.rows[0]) throw new AppError('Akun NOXRIDGE kamu diblokir. Alasan: ' + banned.rows[0].reason, 403, 'WL_BLACKLISTED');\n  const data = await getWhitelist();\n  const entry = data.whitelist.find(v => String(v?.id ?? '') === userId);
   if (!entry || typeof entry.key !== 'string' || wlHash(rawKey).toLowerCase() !== entry.key.toLowerCase()) throw new AppError('Player is not authorized by the current NOXRIDGE whitelist.', 403, 'WL_ACCESS_DENIED');
-  const q = await schema();
   const permissionResult = await q.query('SELECT permissions FROM noxridge_wl_entries WHERE user_id=$1 AND active=TRUE', [userId]);
   const permissions = permissionResult.rows[0]?.permissions || { mode: 'all', features: {} };
   const previous = await q.query('SELECT trial_started_at FROM noxridge_wl_users WHERE user_id=$1', [userId]);
@@ -401,4 +399,37 @@ export const updateWhitelistUserPermissions = async (userId, permissions) => {
     active: result.rows[0].active,
     permissions: result.rows[0].permissions
   };
+};
+
+
+export const listWhitelistBlacklist = async () => {
+  const q = await schema();
+  const result = await q.query('SELECT user_id,username,reason,banned_at,banned_by FROM noxridge_wl_blacklist ORDER BY banned_at DESC');
+  return result.rows.map(row => ({
+    userId: String(row.user_id), username: row.username, reason: row.reason,
+    bannedAt: row.banned_at, bannedBy: String(row.banned_by)
+  }));
+};
+
+export const addWhitelistBlacklist = async ({ userId, username, reason, bannedBy }) => {
+  const q = await schema();
+  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  const cleanName = String(username || 'UNKNOWN').trim().slice(0,64) || 'UNKNOWN';
+  const cleanReason = String(reason || 'Blacklisted by NOXRIDGE owner').trim().slice(0,500);
+  const result = await q.query(
+    `INSERT INTO noxridge_wl_blacklist(user_id,username,reason,banned_by)
+     VALUES($1,$2,$3,$4)
+     ON CONFLICT(user_id) DO UPDATE SET username=EXCLUDED.username,reason=EXCLUDED.reason,banned_by=EXCLUDED.banned_by,banned_at=NOW()
+     RETURNING user_id,username,reason,banned_at,banned_by`,
+    [String(userId), cleanName, cleanReason || 'Blacklisted by NOXRIDGE owner', String(bannedBy)]
+  );
+  return { userId: String(result.rows[0].user_id), username: result.rows[0].username, reason: result.rows[0].reason, bannedAt: result.rows[0].banned_at };
+};
+
+export const removeWhitelistBlacklist = async (userId) => {
+  const q = await schema();
+  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  const result = await q.query('DELETE FROM noxridge_wl_blacklist WHERE user_id=$1 RETURNING user_id', [String(userId)]);
+  if (!result.rows[0]) throw new AppError('Player tidak ditemukan di blacklist.', 404, 'BLACKLIST_USER_NOT_FOUND');
+  return { userId: String(result.rows[0].user_id), unbanned: true };
 };
