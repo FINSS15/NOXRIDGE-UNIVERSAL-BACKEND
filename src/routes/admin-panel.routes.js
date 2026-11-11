@@ -5,7 +5,9 @@ import {
   listWhitelistAdmin,
   addWhitelistUser,
   removeWhitelistUser,
-  updateWhitelistConfig
+  updateWhitelistConfig,
+  updateWhitelistUserPermissions,
+  WHITELIST_FEATURES
 } from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
 
@@ -45,6 +47,20 @@ router.post('/users', async (req, res, next) => {
     if (!parsed.success) throw new AppError('Whitelist user data is invalid.', 400, 'VALIDATION_ERROR');
     const data = await addWhitelistUser(parsed.data);
     return res.status(201).json({ success: true, message: 'WL key hanya ditampilkan sekali. Simpan dengan aman.', data });
+  } catch (error) { return next(error); }
+});
+
+router.put('/users/:userId/permissions', async (req, res, next) => {
+  try {
+    const parsed = z.object({
+      mode: z.enum(['all', 'custom']),
+      features: z.record(z.string(), z.boolean()).optional().default({})
+    }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Pengaturan izin fitur tidak valid.', 400, 'VALIDATION_ERROR');
+    const unknown = Object.keys(parsed.data.features).filter(key => !WHITELIST_FEATURES.includes(key));
+    if (unknown.length) throw new AppError('Ada nama fitur yang tidak dikenal.', 400, 'UNKNOWN_FEATURE');
+    const data = await updateWhitelistUserPermissions(req.params.userId, parsed.data);
+    return res.json({ success: true, data });
   } catch (error) { return next(error); }
 });
 
