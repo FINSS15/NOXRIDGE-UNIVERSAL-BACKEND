@@ -188,7 +188,8 @@ router.post('/remove-background', uploadRateLimiter, requireWhitelist, uploadSin
 
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => '');
-      const safeDetail = detail.replace(/[\r\n]+/g, ' ').slice(0, 240);
+      const safeDetail = detail.replace(/[\r
+]+/g, ' ').slice(0, 240);
       const status = upstream.status === 429 ? 429 : upstream.status === 402 ? 402 : upstream.status === 401 || upstream.status === 403 ? 502 : 502;
       const code = upstream.status === 429 ? 'REMOVE_BG_RATE_LIMIT' : upstream.status === 402 ? 'REMOVE_BG_CREDITS_EXHAUSTED' : 'REMOVE_BG_UPSTREAM_ERROR';
       throw new AppError(
@@ -225,7 +226,11 @@ router.post('/remove-background', uploadRateLimiter, requireWhitelist, uploadSin
   }
 });
 
-router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, (req, res, next) => {\n  const type = String(req.body?.assetType || '');\n  const feature = type === 'Image' || type === 'Decal' ? 'image_upload' : type === 'Audio' ? 'music_upload' : 'model_upload';\n  return requireWhitelistFeature(feature)(req, res, next);\n}, async (req, res, next) => {
+router.post('/upload', uploadRateLimiter, requireWhitelist, uploadSingleFile, (req, res, next) => {
+  const type = String(req.body?.assetType || '');
+  const feature = type === 'Image' || type === 'Decal' ? 'image_upload' : type === 'Audio' ? 'music_upload' : 'model_upload';
+  return requireWhitelistFeature(feature)(req, res, next);
+}, async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('No file was provided.', 400, 'FILE_REQUIRED');
     const parsed = createSchema.safeParse(req.body);
