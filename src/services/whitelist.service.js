@@ -24,6 +24,7 @@ const schema = async () => {
       trial TEXT,
       expires TEXT,
       active BOOLEAN NOT NULL DEFAULT TRUE,
+      permissions JSONB NOT NULL DEFAULT '{"mode":"all","features":{}}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -32,6 +33,7 @@ const schema = async () => {
       value JSONB NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE noxridge_wl_entries ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{"mode":"all","features":{}}'::jsonb;
     CREATE TABLE IF NOT EXISTS noxridge_wl_asset_operations (
       user_id BIGINT NOT NULL, operation_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY(user_id, operation_id)
@@ -143,6 +145,8 @@ export const authenticateWhitelist = async (idInput, rawKey) => {
   const entry = data.whitelist.find(v => String(v?.id ?? '') === userId);
   if (!entry || typeof entry.key !== 'string' || wlHash(rawKey).toLowerCase() !== entry.key.toLowerCase()) throw new AppError('Player is not authorized by the current NOXRIDGE whitelist.', 403, 'WL_ACCESS_DENIED');
   const q = await schema();
+  const permissionResult = await q.query('SELECT permissions FROM noxridge_wl_entries WHERE user_id=$1 AND active=TRUE', [userId]);
+  const permissions = permissionResult.rows[0]?.permissions || { mode: 'all', features: {} };
   const previous = await q.query('SELECT trial_started_at FROM noxridge_wl_users WHERE user_id=$1', [userId]);
   let started = previous.rows[0]?.trial_started_at || null;
   if (entry.trial) {
@@ -171,7 +175,7 @@ export const authenticateWhitelist = async (idInput, rawKey) => {
     const absoluteSeconds = absolute ? Math.floor(absolute.getTime() / 1000) : null;
     if (absoluteSeconds && (!expiresAt || absoluteSeconds < expiresAt)) expiresAt = absoluteSeconds;
   }
-  return { userId, username: String(entry.name || ''), plan: entry.trial ? 'trial' : 'whitelist', expiresAt };
+  return { userId, username: String(entry.name || ''), plan: entry.trial ? 'trial' : 'whitelist', expiresAt, permissions };
 };
 const encrypt = (plain) => {
   if (!env.KEY_ENCRYPTION_SECRET) throw new AppError('Key vault is not configured. Set KEY_ENCRYPTION_SECRET.', 503, 'KEY_VAULT_NOT_CONFIGURED');
@@ -319,13 +323,13 @@ export const listWhitelistAdmin = async () => {
   const q = await schema();
   await ensureLegacyMigration(q);
   const [users, settings] = await Promise.all([
-    q.query("SELECT user_id,username,trial,expires,active,created_at,updated_at FROM noxridge_wl_entries ORDER BY user_id"),
+    q.query("SELECT user_id,username,trial,expires,active,permissions,created_at,updated_at FROM noxridge_wl_entries ORDER BY user_id"),
     q.query("SELECT setting_key,value FROM noxridge_wl_settings WHERE setting_key IN ('global_trial','notice')")
   ]);
   return {
     users: users.rows.map(row => ({
       userId: String(row.user_id), username: row.username, trial: row.trial,
-      expires: row.expires, active: row.active, createdAt: row.created_at, updatedAt: row.updated_at
+      expires: row.expires, active: row.active, permissions: row.permissions || { mode: 'all', features: {} }, createdAt: row.created_at, updatedAt: row.updated_at
     })),
     config: Object.fromEntries(settings.rows.map(row => [row.setting_key, row.value]))
   };
@@ -371,4 +375,30 @@ export const updateWhitelistConfig = async ({ globalTrial, notice }) => {
 export const getWhitelistPublicConfig = async () => {
   const data = await getWhitelist();
   return { global_trial: data.global_trial, notice: data.notice };
+};
+
+
+export const WHITELIST_FEATURES = [
+  'image_upload', 'music_upload', 'model_upload', 'upload_model_to_id',
+  'music_bypass', 'workspace_scanner', 'workspace_inspector', 'ai_chat',
+  'file_manager', 'import_maps'
+];
+
+export const updateWhitelistUserPermissions = async (userId, permissions) => {
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  const mode = permissions?.mode === 'all' ? 'all' : 'custom';
+  const features = Object.fromEntries(WHITELIST_FEATURES.map(key => [key, mode === 'all' ? true : permissions?.features?.[key] === true]));
+  const result = await q.query(
+    'UPDATE noxridge_wl_entries SET permissions=$2::jsonb,updated_at=NOW() WHERE user_id=$1 RETURNING user_id,username,permissions,active',
+    [String(userId), JSON.stringify({ mode, features })]
+  );
+  if (!result.rows[0]) throw new AppError('Whitelist user tidak ditemukan.', 404, 'WL_USER_NOT_FOUND');
+  return {
+    userId: String(result.rows[0].user_id),
+    username: result.rows[0].username,
+    active: result.rows[0].active,
+    permissions: result.rows[0].permissions
+  };
 };
