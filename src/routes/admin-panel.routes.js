@@ -7,7 +7,11 @@ import {
   removeWhitelistUser,
   updateWhitelistConfig,
   updateWhitelistUserPermissions,
-  WHITELIST_FEATURES,\n  listWhitelistBlacklist,\n  addWhitelistBlacklist,\n  removeWhitelistBlacklist\n} from '../services/whitelist.service.js';
+  WHITELIST_FEATURES,
+  listWhitelistBlacklist,
+  addWhitelistBlacklist,
+  removeWhitelistBlacklist
+} from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
 
 const router = Router();
