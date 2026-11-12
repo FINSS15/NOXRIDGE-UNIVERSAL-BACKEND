@@ -80,6 +80,7 @@ router.post('/blacklist', async (req, res, next) => {
       reason: z.string().trim().min(1).max(500)
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Data blacklist tidak valid.', 400, 'VALIDATION_ERROR');
+    if (parsed.data.userId === OWNER_USER_ID) throw new AppError('Akun owner tidak boleh dimasukkan ke blacklist.', 400, 'OWNER_BLACKLIST_PROTECTED');
     const data = await addWhitelistBlacklist({ ...parsed.data, bannedBy: req.noxridge.userId });
     return res.status(201).json({ success: true, data });
   } catch (error) { return next(error); }
