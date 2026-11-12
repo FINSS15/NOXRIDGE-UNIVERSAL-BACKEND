@@ -75,7 +75,7 @@ router.get('/blacklist', async (req, res, next) => {
 router.post('/blacklist', async (req, res, next) => {
   try {
     const parsed = z.object({
-      userId: z.string().regex(/^\\d{1,20}$/),
+      userId: z.string().regex(/^\d{1,20}$/),
       username: z.string().trim().max(64).optional().default('UNKNOWN'),
       reason: z.string().trim().min(1).max(500)
     }).safeParse(req.body);
