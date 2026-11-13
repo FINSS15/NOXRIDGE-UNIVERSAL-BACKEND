@@ -127,6 +127,7 @@ const getWhitelist = async () => {
     notice: config.notice || { status: 'off' }
   };
 };
+const validTrialDuration = (value) => typeof value === 'string' && /^(?:\d+\s*[smhdw])+$/i.test(value.trim()) && duration(value) !== null;
 const duration = (value) => {
   if (typeof value === 'number') return value > 0 ? value : null;
   if (typeof value !== 'string') return null;
@@ -360,7 +361,7 @@ export const addWhitelistUser = async ({ userId, username, trial, expires }) => 
       const setting = await client.query("SELECT value FROM noxridge_wl_settings WHERE setting_key='global_trial'");
       const globalTrial = setting.rows[0]?.value || { status: 'off' };
       const globalDuration = globalTrial.status === 'on' ? String(globalTrial.duration || '') : '';
-      if (globalDuration && duration(globalDuration)) effectiveTrial = globalDuration;
+      if (globalDuration && validTrialDuration(globalDuration)) effectiveTrial = globalDuration;
     }
     const saved = await client.query(
       `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires,active)
@@ -432,6 +433,11 @@ export const removeWhitelistUser = async (userId) => {
 };
 export const updateWhitelistConfig = async ({ globalTrial, notice }) => {
   const q = await schema();
+  if (globalTrial !== undefined) {
+    if (!globalTrial || !['on', 'off'].includes(String(globalTrial.status || '').toLowerCase())) throw new AppError('Status Global Trial harus on atau off.', 400, 'GLOBAL_TRIAL_INVALID');
+    if (String(globalTrial.status).toLowerCase() === 'on' && !validTrialDuration(String(globalTrial.duration || ''))) throw new AppError('Durasi Global Trial tidak valid. Gunakan 1d, 12h, atau 7d.', 400, 'GLOBAL_TRIAL_DURATION_INVALID');
+    globalTrial = { ...globalTrial, status: String(globalTrial.status).toLowerCase() };
+  }
   await ensureLegacyMigration(q);
   if (globalTrial !== undefined) await q.query(
     "INSERT INTO noxridge_wl_settings(setting_key,value) VALUES('global_trial',$1::jsonb) ON CONFLICT(setting_key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()",
