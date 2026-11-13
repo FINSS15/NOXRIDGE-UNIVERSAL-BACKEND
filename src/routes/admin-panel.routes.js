@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireWhitelist } from '../middleware/whitelistAuth.js';
 import {
   listWhitelistAdmin,
+  getWhitelistLegacySnapshot,
   addWhitelistUser,
   updateWhitelistUserTrial,
   removeWhitelistUser,
@@ -14,6 +15,9 @@ import {
   removeWhitelistBlacklist
 } from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
+import { syncLegacyWhitelistJson } from '../services/legacy-whitelist-sync.service.js';
+
+const syncLegacyWhitelist = async () => syncLegacyWhitelistJson(await getWhitelistLegacySnapshot());
 
 const router = Router();
 const OWNER_USER_ID = '8172230031';
@@ -50,7 +54,8 @@ router.post('/users', async (req, res, next) => {
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Whitelist user data is invalid.', 400, 'VALIDATION_ERROR');
     const data = await addWhitelistUser(parsed.data);
-    return res.status(201).json({ success: true, message: 'WL key hanya ditampilkan sekali. Simpan dengan aman.', data });
+    const sync = await syncLegacyWhitelist();
+    return res.status(201).json({ success: true, message: 'WL key hanya ditampilkan sekali. Simpan dengan aman.', data, sync });
   } catch (error) { return next(error); }
 });
 
@@ -62,7 +67,8 @@ router.put('/users/:userId/trial', async (req, res, next) => {
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Durasi trial tidak valid.', 400, 'VALIDATION_ERROR');
     const data = await updateWhitelistUserTrial(req.params.userId, parsed.data.trial);
-    return res.json({ success: true, data });
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
 
@@ -76,7 +82,8 @@ router.put('/users/:userId/permissions', async (req, res, next) => {
     const unknown = Object.keys(parsed.data.features).filter(key => !WHITELIST_FEATURES.includes(key));
     if (unknown.length) throw new AppError('Ada nama fitur yang tidak dikenal.', 400, 'UNKNOWN_FEATURE');
     const data = await updateWhitelistUserPermissions(req.params.userId, parsed.data);
-    return res.json({ success: true, data });
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
 
@@ -95,19 +102,22 @@ router.post('/blacklist', async (req, res, next) => {
     if (!parsed.success) throw new AppError('Data blacklist tidak valid.', 400, 'VALIDATION_ERROR');
     if (parsed.data.userId === OWNER_USER_ID) throw new AppError('Akun owner tidak boleh dimasukkan ke blacklist.', 400, 'OWNER_BLACKLIST_PROTECTED');
     const data = await addWhitelistBlacklist({ ...parsed.data, bannedBy: req.noxridge.userId });
-    return res.status(201).json({ success: true, data });
+    const sync = await syncLegacyWhitelist();
+    return res.status(201).json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
 
 router.delete('/blacklist/:userId', async (req, res, next) => {
-  try { return res.json({ success: true, data: await removeWhitelistBlacklist(req.params.userId) }); }
+  try { const data = await removeWhitelistBlacklist(req.params.userId); const sync = await syncLegacyWhitelist(); return res.json({ success: true, data, sync }); }
   catch (error) { return next(error); }
 });
 
 router.delete('/users/:userId', async (req, res, next) => {
   try {
     if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
-    return res.json({ success: true, data: await removeWhitelistUser(req.params.userId) });
+    const data = await removeWhitelistUser(req.params.userId);
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
 
@@ -118,7 +128,9 @@ router.put('/config', async (req, res, next) => {
       notice: z.record(z.string(), z.unknown()).optional()
     }).refine(value => value.globalTrial !== undefined || value.notice !== undefined).safeParse(req.body);
     if (!parsed.success) throw new AppError('Konfigurasi whitelist tidak valid.', 400, 'VALIDATION_ERROR');
-    return res.json({ success: true, data: await updateWhitelistConfig(parsed.data) });
+    const data = await updateWhitelistConfig(parsed.data);
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
 

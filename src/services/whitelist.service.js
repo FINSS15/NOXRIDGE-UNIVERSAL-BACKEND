@@ -358,6 +358,24 @@ export const listWhitelistAdmin = async () => {
     config: Object.fromEntries(settings.rows.map(row => [row.setting_key, row.value]))
   };
 };
+export const getWhitelistLegacySnapshot = async () => {
+  const data = await getWhitelist();
+  const q = await schema();
+  const banned = await q.query('SELECT user_id FROM noxridge_wl_blacklist');
+  const blocked = new Set(banned.rows.map(row => String(row.user_id)));
+  return {
+    global_trial: data.global_trial || { status: 'off' },
+    notice: data.notice || { status: 'off' },
+    whitelist: data.whitelist.filter(entry => !blocked.has(String(entry.id))).map(entry => ({
+      name: entry.name,
+      id: String(entry.id),
+      key: String(entry.key).toLowerCase(),
+      ...(entry.trial ? { trial: entry.trial } : {}),
+      ...(entry.expires ? { expires: entry.expires } : {})
+    }))
+  };
+};
+
 export const addWhitelistUser = async ({ userId, username, trial, expires }) => {
   const q = await schema();
   await ensureLegacyMigration(q);

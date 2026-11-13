@@ -10,6 +10,9 @@ const envSchema = z.object({
   API_KEY: z.string().min(32).optional(),
   MASTER_KEY: z.string().min(32).optional(),
 
+  // GitHub legacy whitelist mirror (fine-grained token with Contents read/write on FINSS15/Last)
+  GITHUB_TOKEN: z.string().min(1).optional(),
+
   // Account database and encrypted user-key vault
   DATABASE_URL: z.string().url().optional(),
   KEY_ENCRYPTION_SECRET: z.string().min(32).optional(),
