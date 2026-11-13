@@ -331,14 +331,30 @@ export const listWhitelistAdmin = async () => {
   const q = await schema();
   await ensureLegacyMigration(q);
   const [users, settings] = await Promise.all([
-    q.query("SELECT user_id,username,trial,expires,active,permissions,created_at,updated_at FROM noxridge_wl_entries ORDER BY user_id"),
+    q.query(`SELECT e.user_id,e.username,e.trial,e.expires,e.active,e.permissions,e.created_at,e.updated_at,u.trial_started_at
+      FROM noxridge_wl_entries e LEFT JOIN noxridge_wl_users u ON u.user_id=e.user_id ORDER BY e.user_id`),
     q.query("SELECT setting_key,value FROM noxridge_wl_settings WHERE setting_key IN ('global_trial','notice')")
   ]);
   return {
-    users: users.rows.map(row => ({
-      userId: String(row.user_id), username: row.username, trial: row.trial,
-      expires: row.expires, active: row.active, permissions: row.permissions || { mode: 'all', features: {} }, createdAt: row.created_at, updatedAt: row.updated_at
-    })),
+    users: users.rows.map(row => {
+      const seconds = row.trial ? duration(row.trial) : null;
+      const startedAt = row.trial_started_at ? new Date(row.trial_started_at) : null;
+      const trialExpiresAt = seconds && startedAt ? new Date(startedAt.getTime() + seconds * 1000) : null;
+      const absoluteExpiry = row.expires ? expiryWib(row.expires) : null;
+      const now = Date.now();
+      const trialStatus = !row.trial ? 'none' : !startedAt ? 'not_started' : now >= trialExpiresAt.getTime() ? 'expired' : 'active';
+      return {
+        userId: String(row.user_id), username: row.username, trial: row.trial,
+        trialStartedAt: startedAt ? startedAt.toISOString() : null,
+        trialExpiresAt: trialExpiresAt ? trialExpiresAt.toISOString() : null,
+        trialStatus,
+        trialRemainingSeconds: trialExpiresAt && now < trialExpiresAt.getTime() ? Math.floor((trialExpiresAt.getTime() - now) / 1000) : 0,
+        expires: row.expires,
+        accessExpired: absoluteExpiry ? now >= absoluteExpiry.getTime() : false,
+        active: row.active, permissions: row.permissions || { mode: 'all', features: {} },
+        createdAt: row.created_at, updatedAt: row.updated_at
+      };
+    }),
     config: Object.fromEntries(settings.rows.map(row => [row.setting_key, row.value]))
   };
 };
