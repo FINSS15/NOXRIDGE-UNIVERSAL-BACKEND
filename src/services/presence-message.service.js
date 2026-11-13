@@ -27,9 +27,9 @@ const ensureSchema = async () => {
       'CREATE INDEX IF NOT EXISTS noxridge_importer_presence_last_seen ON noxridge_importer_presence(last_seen DESC);',
       'CREATE TABLE IF NOT EXISTS noxridge_importer_messages (',
       ' id BIGSERIAL PRIMARY KEY, recipient_user_id BIGINT NOT NULL, sender_user_id BIGINT NOT NULL,',
-      ' sender_username VARCHAR(64) NOT NULL, message_type VARCHAR(16) NOT NULL CHECK (message_type IN (\\'broadcast\\',\\'private\\')),',
+      " sender_username VARCHAR(64) NOT NULL, message_type VARCHAR(16) NOT NULL CHECK (message_type IN ('broadcast','private')),",
       ' title VARCHAR(120) NOT NULL, body VARCHAR(1200) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),',
-      ' delivered_at TIMESTAMPTZ, expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL \\'7 days\\')',
+      " delivered_at TIMESTAMPTZ, expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days')",
       ');',
       'CREATE INDEX IF NOT EXISTS noxridge_importer_messages_inbox ON noxridge_importer_messages(recipient_user_id, delivered_at, id);'
     ].join('\n'));
