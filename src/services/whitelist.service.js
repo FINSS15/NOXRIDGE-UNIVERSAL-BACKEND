@@ -391,7 +391,7 @@ export const updateWhitelistUserTrial = async (userId, trial) => {
   const q = await schema();
   await ensureLegacyMigration(q);
   if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
-  if (trial !== null && (!duration(String(trial)) || !/^(?:\\d+\\s*[smhdw])+$/i.test(String(trial).replace(/,/g, '')))) {
+  if (trial !== null && !validTrialDuration(String(trial))) {
     throw new AppError('Durasi trial tidak valid. Gunakan contoh 1d, 12h, atau 7d.', 400, 'WL_TRIAL_INVALID');
   }
   const client = await q.connect();
