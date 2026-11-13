@@ -17,7 +17,7 @@ import adminPanelRoutes from './routes/admin-panel.routes.js';
 import presenceRoutes from './routes/presence.routes.js';
 import adminMessagesRoutes from './routes/admin-messages.routes.js';
 
-import { apiRateLimiter, uploadRateLimiter } from './middleware/rateLimit.js';
+import { apiRateLimiter, uploadRateLimiter, presenceRateLimiter } from './middleware/rateLimit.js';
 import notFound from './middleware/notFound.js';
 import errorHandler from './middleware/errorHandler.js';
 
@@ -57,7 +57,7 @@ app.use('/account', apiRateLimiter, accountRoutes);
 app.use('/whitelist', apiRateLimiter, whitelistRoutes);
 app.use('/admin-panel', apiRateLimiter, adminPanelRoutes);
 app.use('/admin-panel', apiRateLimiter, adminMessagesRoutes);
-app.use('/presence', apiRateLimiter, presenceRoutes);
+app.use('/presence', presenceRateLimiter, presenceRoutes);
 app.use('/assets', apiRateLimiter, assetsRoutes);
 app.use('/storage', uploadRateLimiter, storageRoutes);
 app.use('/ai', aiRoutes);
