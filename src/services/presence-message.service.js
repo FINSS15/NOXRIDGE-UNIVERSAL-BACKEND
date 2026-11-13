@@ -51,7 +51,7 @@ export const heartbeatImporter = async ({ userId, username, sessionId }) => {
 export const listActiveImporterSessions = async () => {
   const q = await ensureSchema();
   const result = await q.query(
-    "SELECT user_id,username,last_seen FROM noxridge_importer_presence WHERE last_seen >= NOW() - INTERVAL '75 seconds' ORDER BY username ASC"
+    "SELECT p.user_id,p.username,p.last_seen FROM noxridge_importer_presence p JOIN noxridge_wl_entries w ON w.user_id=p.user_id AND w.active=TRUE LEFT JOIN noxridge_wl_blacklist b ON b.user_id=p.user_id WHERE p.last_seen >= NOW() - INTERVAL '75 seconds' AND b.user_id IS NULL ORDER BY p.username ASC"
   );
   return result.rows.map(row => ({
     userId: String(row.user_id),
@@ -67,7 +67,7 @@ export const enqueueBroadcast = async ({ senderId, senderUsername, title, body }
   try {
     await client.query('BEGIN');
     const recipients = await client.query(
-      "SELECT user_id FROM noxridge_importer_presence WHERE last_seen >= NOW() - INTERVAL '75 seconds' ORDER BY user_id"
+      "SELECT p.user_id FROM noxridge_importer_presence p JOIN noxridge_wl_entries w ON w.user_id=p.user_id AND w.active=TRUE LEFT JOIN noxridge_wl_blacklist b ON b.user_id=p.user_id WHERE p.last_seen >= NOW() - INTERVAL '75 seconds' AND b.user_id IS NULL ORDER BY p.user_id"
     );
     const ids = [];
     for (const recipient of recipients.rows) {
@@ -88,7 +88,7 @@ export const enqueueBroadcast = async ({ senderId, senderUsername, title, body }
 export const enqueuePrivateMessage = async ({ senderId, senderUsername, recipientId, title, body }) => {
   const q = await ensureSchema();
   const active = await q.query(
-    "SELECT 1 FROM noxridge_importer_presence WHERE user_id=$1 AND last_seen >= NOW() - INTERVAL '75 seconds'",
+    "SELECT 1 FROM noxridge_importer_presence p JOIN noxridge_wl_entries w ON w.user_id=p.user_id AND w.active=TRUE LEFT JOIN noxridge_wl_blacklist b ON b.user_id=p.user_id WHERE p.user_id=$1 AND p.last_seen >= NOW() - INTERVAL '75 seconds' AND b.user_id IS NULL",
     [String(recipientId)]
   );
   if (!active.rowCount) throw new AppError('Player tidak sedang aktif menggunakan Importer.', 409, 'IMPORTER_PLAYER_NOT_ACTIVE');
