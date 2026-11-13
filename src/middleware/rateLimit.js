@@ -48,7 +48,7 @@ export const uploadRateLimiter = createRateLimiter({
 export const presenceRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 180,
-  keyGenerator: (req) => 'noxridge-wl:' + String(req.get('x-noxridge-user-id') || req.ip),
+  keyGenerator: (req) => 'noxridge-wl:' + String(req.get('x-noxridge-user-id') || 'anonymous'),
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => res.status(429).json({
