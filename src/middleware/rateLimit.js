@@ -43,3 +43,17 @@ export const uploadRateLimiter = createRateLimiter({
   limit: 10,
   message: 'Too many upload requests. Please try again later.'
 });
+
+// Presence uses a per-whitelisted-user bucket because each Importer sends periodic heartbeats and inbox polls.
+export const presenceRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 180,
+  keyGenerator: (req) => 'noxridge-wl:' + String(req.get('x-noxridge-user-id') || 'anonymous'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => res.status(429).json({
+    success: false,
+    error: { code: 'PRESENCE_RATE_LIMIT_EXCEEDED', message: 'Importer presence polling is temporarily rate limited.' },
+    retryAfter: res.getHeader('Retry-After') || null
+  })
+});
