@@ -4,6 +4,7 @@ import { requireWhitelist } from '../middleware/whitelistAuth.js';
 import {
   listWhitelistAdmin,
   addWhitelistUser,
+  updateWhitelistUserTrial,
   removeWhitelistUser,
   updateWhitelistConfig,
   updateWhitelistUserPermissions,
@@ -50,6 +51,18 @@ router.post('/users', async (req, res, next) => {
     if (!parsed.success) throw new AppError('Whitelist user data is invalid.', 400, 'VALIDATION_ERROR');
     const data = await addWhitelistUser(parsed.data);
     return res.status(201).json({ success: true, message: 'WL key hanya ditampilkan sekali. Simpan dengan aman.', data });
+  } catch (error) { return next(error); }
+});
+
+
+router.put('/users/:userId/trial', async (req, res, next) => {
+  try {
+    const parsed = z.object({
+      trial: z.string().trim().min(1).max(32).nullable()
+    }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Durasi trial tidak valid.', 400, 'VALIDATION_ERROR');
+    const data = await updateWhitelistUserTrial(req.params.userId, parsed.data.trial);
+    return res.json({ success: true, data });
   } catch (error) { return next(error); }
 });
 
