@@ -342,7 +342,7 @@ export const listWhitelistAdmin = async () => {
       const trialExpiresAt = seconds && startedAt ? new Date(startedAt.getTime() + seconds * 1000) : null;
       const absoluteExpiry = row.expires ? expiryWib(row.expires) : null;
       const now = Date.now();
-      const trialStatus = !row.trial ? 'none' : !startedAt ? 'not_started' : now >= trialExpiresAt.getTime() ? 'expired' : 'active';
+      const trialStatus = !row.trial ? 'none' : !seconds ? 'invalid' : !startedAt ? 'not_started' : now >= trialExpiresAt.getTime() ? 'expired' : 'active';
       return {
         userId: String(row.user_id), username: row.username, trial: row.trial,
         trialStartedAt: startedAt ? startedAt.toISOString() : null,
@@ -361,7 +361,7 @@ export const listWhitelistAdmin = async () => {
 export const addWhitelistUser = async ({ userId, username, trial, expires }) => {
   const q = await schema();
   await ensureLegacyMigration(q);
-  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
 
   // Global Trial is a one-time default for newly created WL entries only.
   // Existing players keep their individual trial unless the owner explicitly changes it.
@@ -406,7 +406,7 @@ export const addWhitelistUser = async ({ userId, username, trial, expires }) => 
 export const updateWhitelistUserTrial = async (userId, trial) => {
   const q = await schema();
   await ensureLegacyMigration(q);
-  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   if (trial !== null && !validTrialDuration(String(trial))) {
     throw new AppError('Durasi trial tidak valid. Gunakan contoh 1d, 12h, atau 7d.', 400, 'WL_TRIAL_INVALID');
   }
