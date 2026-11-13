@@ -385,6 +385,43 @@ export const addWhitelistUser = async ({ userId, username, trial, expires }) => 
     throw error;
   } finally { client.release(); }
 };
+
+export const updateWhitelistUserTrial = async (userId, trial) => {
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (trial !== null && (!duration(String(trial)) || !/^(?:\\d+\\s*[smhdw])+$/i.test(String(trial).replace(/,/g, '')))) {
+    throw new AppError('Durasi trial tidak valid. Gunakan contoh 1d, 12h, atau 7d.', 400, 'WL_TRIAL_INVALID');
+  }
+  const client = await q.connect();
+  try {
+    await client.query('BEGIN');
+    const updated = await client.query(
+      'UPDATE noxridge_wl_entries SET trial=$2,updated_at=NOW() WHERE user_id=$1 RETURNING user_id,username,trial,active',
+      [String(userId), trial]
+    );
+    if (!updated.rows[0]) throw new AppError('Whitelist user tidak ditemukan.', 404, 'WL_USER_NOT_FOUND');
+    await client.query(
+      `INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at)
+       SELECT user_id,key_hash,$2 FROM noxridge_wl_entries WHERE user_id=$1
+       ON CONFLICT(user_id) DO UPDATE SET trial_started_at=$2,updated_at=NOW()`,
+      [String(userId), trial === null ? null : new Date()]
+    );
+    await client.query('COMMIT');
+    cache = undefined;
+    return {
+      userId: String(updated.rows[0].user_id),
+      username: updated.rows[0].username,
+      trial: updated.rows[0].trial,
+      active: updated.rows[0].active,
+      trialStartedAt: trial === null ? null : new Date().toISOString()
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
+};
+
 export const removeWhitelistUser = async (userId) => {
   const q = await schema();
   await ensureLegacyMigration(q);
