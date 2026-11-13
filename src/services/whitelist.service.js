@@ -344,18 +344,46 @@ export const listWhitelistAdmin = async () => {
 export const addWhitelistUser = async ({ userId, username, trial, expires }) => {
   const q = await schema();
   await ensureLegacyMigration(q);
-  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
+  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
+
+  // Global Trial is a one-time default for newly created WL entries only.
+  // Existing players keep their individual trial unless the owner explicitly changes it.
+  const client = await q.connect();
   const rawKey = randomBytes(18).toString('hex');
   const keyHash = wlHash(rawKey).toLowerCase();
-  await q.query(
-    `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires,active)
-     VALUES($1,$2,$3,$4,$5,TRUE)
-     ON CONFLICT(user_id) DO UPDATE SET username=EXCLUDED.username,key_hash=EXCLUDED.key_hash,
-       trial=EXCLUDED.trial,expires=EXCLUDED.expires,active=TRUE,updated_at=NOW()`,
-    [String(userId), String(username).trim().slice(0,64) || 'NOXRIDGE_USER', keyHash, trial || null, expires || null]
-  );
-  cache = undefined;
-  return { userId: String(userId), username: String(username).trim().slice(0,64) || 'NOXRIDGE_USER', wlKey: rawKey };
+  const cleanName = String(username).trim().slice(0,64) || 'NOXRIDGE_USER';
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT user_id,trial FROM noxridge_wl_entries WHERE user_id=$1 FOR UPDATE', [String(userId)]);
+    let effectiveTrial = trial === undefined ? (existing.rows[0]?.trial ?? null) : (trial || null);
+    if (!existing.rows[0] && trial === undefined) {
+      const setting = await client.query("SELECT value FROM noxridge_wl_settings WHERE setting_key='global_trial'");
+      const globalTrial = setting.rows[0]?.value || { status: 'off' };
+      const globalDuration = globalTrial.status === 'on' ? String(globalTrial.duration || '') : '';
+      if (globalDuration && duration(globalDuration)) effectiveTrial = globalDuration;
+    }
+    const saved = await client.query(
+      `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires,active)
+       VALUES($1,$2,$3,$4,$5,TRUE)
+       ON CONFLICT(user_id) DO UPDATE SET username=EXCLUDED.username,key_hash=EXCLUDED.key_hash,
+         trial=$6,expires=COALESCE($7,noxridge_wl_entries.expires),active=TRUE,updated_at=NOW()
+       RETURNING user_id`,
+      [String(userId), cleanName, keyHash, effectiveTrial, expires || null, effectiveTrial, expires || null]
+    );
+    await client.query(
+      `INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at) VALUES($1,$2,$3)
+       ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,
+         trial_started_at=CASE WHEN $4::boolean THEN NULL ELSE noxridge_wl_users.trial_started_at END,
+         updated_at=NOW()`,
+      [String(userId), keyHash, effectiveTrial ? null : null, Boolean(existing.rows[0] && trial !== undefined)]
+    );
+    await client.query('COMMIT');
+    cache = undefined;
+    return { userId: String(userId), username: cleanName, wlKey: rawKey, trial: effectiveTrial };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
 };
 export const removeWhitelistUser = async (userId) => {
   const q = await schema();
