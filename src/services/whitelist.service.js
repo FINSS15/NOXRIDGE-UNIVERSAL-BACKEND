@@ -483,12 +483,29 @@ export const updateWhitelistUserTrial = async (userId, trial) => {
 };
 
 export const removeWhitelistUser = async (userId) => {
+  const id = String(userId);
   const q = await schema();
   await ensureLegacyMigration(q);
-  const result = await q.query("UPDATE noxridge_wl_entries SET active=FALSE,updated_at=NOW() WHERE user_id=$1 RETURNING user_id", [String(userId)]);
-  if (!result.rows[0]) throw new AppError('Whitelist user was not found.', 404, 'WL_USER_NOT_FOUND');
-  cache = undefined;
-  return { userId: String(userId), revoked: true };
+  const client = await q.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      'DELETE FROM noxridge_wl_entries WHERE user_id=$1 RETURNING user_id',
+      [id]
+    );
+    if (!result.rows[0]) throw new AppError('Whitelist user was not found.', 404, 'WL_USER_NOT_FOUND');
+    await client.query('DELETE FROM noxridge_wl_users WHERE user_id=$1', [id]);
+    await client.query('DELETE FROM noxridge_wl_asset_operations WHERE user_id=$1', [id]);
+    await client.query('DELETE FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1', [id]);
+    await client.query('COMMIT');
+    cache = undefined;
+    return { userId: id, deleted: true };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 export const updateWhitelistConfig = async ({ globalTrial, notice }) => {
   const q = await schema();
