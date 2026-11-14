@@ -17,7 +17,7 @@ import {
 } from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
 import { syncLegacyWhitelistJson } from '../services/legacy-whitelist-sync.service.js';
-import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin, setPlayerPanelKey } from '../services/admin-role.service.js';
+import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin } from '../services/admin-role.service.js';
 
 const syncLegacyWhitelist = async () => syncLegacyWhitelistJson(await getWhitelistLegacySnapshot());
 
@@ -147,15 +147,6 @@ router.put('/config', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-
-router.put('/users/:userId/panel-key', async (req, res, next) => {
-  try {
-    const parsed = z.object({ panelKey: z.string().trim().min(4).max(32).regex(/^\d+$/) }).safeParse(req.body);
-    if (!parsed.success) throw new AppError('Panel Access Key harus berupa angka 4 sampai 32 digit.', 400, 'PANEL_KEY_INVALID');
-    const data = await setPlayerPanelKey(req.params.userId, parsed.data.panelKey, req.noxridge.userId);
-    return res.json({ success: true, data });
-  } catch (error) { return next(error); }
-});
 
 router.get('/admins', async (req, res, next) => {
   try { return res.json({ success: true, data: await listPanelAdmins() }); }
