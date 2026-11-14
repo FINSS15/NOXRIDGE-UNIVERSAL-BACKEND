@@ -132,7 +132,7 @@ export const revokePanelAdmin = async (userId) => {
 
 export const deletePanelAccessForUser = async (userId) => {
   const id = String(userId ?? '');
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   if (id === OWNER_USER_ID) throw new AppError('Owner tidak dapat dihapus.', 400, 'OWNER_ROLE_PROTECTED');
   const q = await ensureSchema();
   await q.query('DELETE FROM noxridge_panel_access WHERE user_id=$1', [id]);
