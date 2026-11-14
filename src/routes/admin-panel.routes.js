@@ -6,6 +6,7 @@ import {
   getWhitelistLegacySnapshot,
   addWhitelistUser,
   updateWhitelistUserTrial,
+  updateWhitelistUserKey,
   removeWhitelistUser,
   updateWhitelistConfig,
   updateWhitelistUserPermissions,
@@ -51,7 +52,8 @@ router.post('/users', async (req, res, next) => {
       userId: z.string().regex(/^\d{1,20}$/),
       username: z.string().trim().min(1).max(64),
       trial: z.string().trim().max(32).optional().nullable(),
-      expires: z.string().trim().max(40).optional().nullable()
+      expires: z.string().trim().max(40).optional().nullable(),
+      wlKey: z.string().trim().regex(/^\\d{4,32}$/)
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Whitelist user data is invalid.', 400, 'VALIDATION_ERROR');
     const data = await addWhitelistUser(parsed.data);
@@ -60,6 +62,16 @@ router.post('/users', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+
+router.put('/users/:userId/wl-key', async (req, res, next) => {
+  try {
+    const parsed = z.object({ wlKey: z.string().trim().regex(/^\\d{4,32}$/) }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
+    const data = await updateWhitelistUserKey(req.params.userId, parsed.data.wlKey);
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
+  } catch (error) { return next(error); }
+});
 
 router.put('/users/:userId/trial', async (req, res, next) => {
   try {
