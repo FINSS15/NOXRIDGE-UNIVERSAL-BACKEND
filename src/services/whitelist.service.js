@@ -507,6 +507,19 @@ export const removeWhitelistUser = async (userId) => {
     client.release();
   }
 };
+export const revokeWhitelistUser = async (userId) => {
+  const id = String(userId);
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  const result = await q.query(
+    "UPDATE noxridge_wl_entries SET active=FALSE,updated_at=NOW() WHERE user_id=$1 RETURNING user_id",
+    [id]
+  );
+  if (!result.rows[0]) throw new AppError('Whitelist user was not found.', 404, 'WL_USER_NOT_FOUND');
+  cache = undefined;
+  return { userId: id, revoked: true };
+};
+
 export const updateWhitelistConfig = async ({ globalTrial, notice }) => {
   const q = await schema();
   if (globalTrial !== undefined) {
