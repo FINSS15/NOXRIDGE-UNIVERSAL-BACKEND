@@ -60,7 +60,7 @@ const schema = async () => {
   return db();
 };
 const rotl = (v, n) => ((v << n) | (v >>> (32 - n))) >>> 0;
-const wlHash = (value) => {
+export const wlHash = (value) => {
   const s = `NXR|${String(value)}|${String(value).length}`;
   let a = 2166136261 >>> 0, b = 5381 >>> 0, c = 2654435769 >>> 0;
   for (let i = 1; i <= s.length; i++) {
@@ -376,7 +376,7 @@ export const getWhitelistLegacySnapshot = async () => {
   };
 };
 
-export const addWhitelistUser = async ({ userId, username, trial, expires }) => {
+export const addWhitelistUser = async ({ userId, username, trial, expires, wlKey }) => {
   const q = await schema();
   await ensureLegacyMigration(q);
   if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
@@ -384,7 +384,8 @@ export const addWhitelistUser = async ({ userId, username, trial, expires }) => 
   // Global Trial is a one-time default for newly created WL entries only.
   // Existing players keep their individual trial unless the owner explicitly changes it.
   const client = await q.connect();
-  const rawKey = randomBytes(18).toString('hex');
+  const rawKey = String(wlKey ?? '').trim();
+  if (!/^\d{4,32}$/.test(rawKey)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
   const keyHash = wlHash(rawKey).toLowerCase();
   const cleanName = String(username).trim().slice(0,64) || 'NOXRIDGE_USER';
   try {
@@ -415,6 +416,30 @@ export const addWhitelistUser = async ({ userId, username, trial, expires }) => 
     await client.query('COMMIT');
     cache = undefined;
     return { userId: String(userId), username: cleanName, wlKey: rawKey, trial: effectiveTrial };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
+};
+
+export const updateWhitelistUserKey = async (userId, rawKey) => {
+  const id = String(userId ?? '');
+  const key = String(rawKey ?? '').trim();
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{4,32}$/.test(key)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  const keyHash = wlHash(key).toLowerCase();
+  const client = await q.connect();
+  try {
+    await client.query('BEGIN');
+    const updated = await client.query('UPDATE noxridge_wl_entries SET key_hash=$2,active=TRUE,updated_at=NOW() WHERE user_id=$1 RETURNING user_id,username', [id, keyHash]);
+    if (!updated.rows[0]) throw new AppError('Whitelist user tidak ditemukan.', 404, 'WL_USER_NOT_FOUND');
+    await client.query(`INSERT INTO noxridge_wl_users(user_id,wl_key_hash) VALUES($1,$2)
+      ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,updated_at=NOW()`, [id, keyHash]);
+    await client.query('COMMIT');
+    cache = undefined;
+    return { userId: id, username: updated.rows[0].username, keyUpdated: true };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
