@@ -7,7 +7,7 @@ import {
   addWhitelistUser,
   updateWhitelistUserTrial,
   updateWhitelistUserKey,
-  removeWhitelistUser,
+  removeWhitelistUser,\n  revokeWhitelistUser,
   updateWhitelistConfig,
   updateWhitelistUserPermissions,
   WHITELIST_FEATURES,
@@ -130,6 +130,15 @@ router.delete('/users/:userId', async (req, res, next) => {
     if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
     const data = await removeWhitelistUser(req.params.userId);
     await deletePanelAccessForUser(req.params.userId);
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
+  } catch (error) { return next(error); }
+});
+
+router.patch('/users/:userId/revoke', async (req, res, next) => {
+  try {
+    if (!/^\\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+    const data = await revokeWhitelistUser(req.params.userId);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
