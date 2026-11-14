@@ -137,7 +137,7 @@ router.delete('/users/:userId', async (req, res, next) => {
 
 router.patch('/users/:userId/revoke', async (req, res, next) => {
   try {
-    if (!/^\\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+    if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
     const data = await revokeWhitelistUser(req.params.userId);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
