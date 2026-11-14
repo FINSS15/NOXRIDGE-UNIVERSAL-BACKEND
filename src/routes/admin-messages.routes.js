@@ -2,30 +2,25 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireWhitelist } from '../middleware/whitelistAuth.js';
 import { AppError } from '../utils/errors.js';
+import { requirePanelPermission } from '../services/admin-role.service.js';
 import { enqueueBroadcast, enqueuePrivateMessage, listActiveImporterSessions } from '../services/presence-message.service.js';
 
 const router = Router();
-const OWNER_USER_ID = '8172230031';
-router.use(requireWhitelist, (req, res, next) => {
-  if (String(req.noxridge?.userId || '') !== OWNER_USER_ID) {
-    return next(new AppError('Admin Panel hanya dapat diakses oleh owner NOXRIDGE.', 403, 'ADMIN_OWNER_ONLY'));
-  }
-  return next();
-});
+router.use(requireWhitelist);
 
 const messageSchema = z.object({
   title: z.string().trim().min(1).max(120),
   body: z.string().trim().min(1).max(1200)
 });
 
-router.get('/sessions', async (req, res, next) => {
+router.get('/sessions', requirePanelPermission('view_sessions'), async (req, res, next) => {
   try {
     const sessions = await listActiveImporterSessions();
     return res.json({ success: true, data: { sessions, activeCount: sessions.length } });
   } catch (error) { return next(error); }
 });
 
-router.post('/messages/broadcast', async (req, res, next) => {
+router.post('/messages/broadcast', requirePanelPermission('send_messages'), async (req, res, next) => {
   try {
     const parsed = messageSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Judul atau isi announcement tidak valid.', 400, 'INVALID_MESSAGE');
@@ -39,7 +34,7 @@ router.post('/messages/broadcast', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.post('/messages/private', async (req, res, next) => {
+router.post('/messages/private', requirePanelPermission('send_messages'), async (req, res, next) => {
   try {
     const parsed = z.object({
       userId: z.string().regex(/^[0-9]{1,20}$/),
