@@ -69,22 +69,19 @@ export const setPlayerPanelKey = async (userId, rawKey, changedBy) => {
   return { userId: id, panelKeyConfigured: true };
 };
 
-export const verifyPlayerPanelAccess = async (userId, rawKey) => {
+export const verifyPlayerPanelAccess = async (userId) => {
   const id = String(userId ?? '');
-  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 401, 'PANEL_AUTH_INVALID');
+  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 401, 'PANEL_AUTH_INVALID');
   if (id === OWNER_USER_ID) return { authenticated: true, role: 'owner', permissions: { all: true } };
-  const key = String(rawKey ?? '').trim();
-  if (!/^\d{4,32}$/.test(key)) throw new AppError('Panel Access Key tidak valid.', 401, 'PANEL_KEY_INVALID');
   const q = await ensureSchema();
   const result = await q.query(
-    "SELECT p.panel_key_salt,p.panel_key_hash,p.role,p.enabled,p.permissions FROM noxridge_panel_access p " +
+    "SELECT p.role,p.enabled,p.permissions FROM noxridge_panel_access p " +
     'JOIN noxridge_wl_entries w ON w.user_id=p.user_id AND w.active=TRUE LEFT JOIN noxridge_wl_blacklist b ON b.user_id=p.user_id ' +
-    'WHERE p.user_id=$1 AND b.user_id IS NULL', [id]
+    "WHERE p.user_id=$1 AND b.user_id IS NULL", [id]
   );
   const row = result.rows[0];
-  if (!row || !row.enabled || !row.panel_key_salt || !row.panel_key_hash) throw new AppError('Panel access belum diaktifkan untuk akun ini.', 403, 'PANEL_ACCESS_DISABLED');
-  if (!await verifyPanelKey(key, row.panel_key_salt, row.panel_key_hash)) throw new AppError('Panel Access Key salah.', 401, 'PANEL_KEY_INVALID');
-  return { authenticated: true, role: row.role, enabled: row.enabled, permissions: row.role === 'admin' ? normalizePermissions(row.permissions) : {} };
+  if (!row || row.role !== 'admin' || !row.enabled) throw new AppError('Akun ini bukan Admin panel yang aktif.', 403, 'PANEL_ADMIN_REQUIRED');
+  return { authenticated: true, role: 'admin', enabled: true, permissions: normalizePermissions(row.permissions) };
 };
 
 export const listPanelAdmins = async () => {
