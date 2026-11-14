@@ -16,6 +16,7 @@ import {
 } from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
 import { syncLegacyWhitelistJson } from '../services/legacy-whitelist-sync.service.js';
+import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin, setPlayerPanelKey } from '../services/admin-role.service.js';
 
 const syncLegacyWhitelist = async () => syncLegacyWhitelistJson(await getWhitelistLegacySnapshot());
 
@@ -132,6 +133,56 @@ router.put('/config', async (req, res, next) => {
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
+});
+
+
+router.put('/users/:userId/panel-key', async (req, res, next) => {
+  try {
+    const parsed = z.object({ panelKey: z.string().trim().min(4).max(32).regex(/^\\d+$/) }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Panel Access Key harus berupa angka 4 sampai 32 digit.', 400, 'PANEL_KEY_INVALID');
+    const data = await setPlayerPanelKey(req.params.userId, parsed.data.panelKey, req.noxridge.userId);
+    return res.json({ success: true, data });
+  } catch (error) { return next(error); }
+});
+
+router.get('/admins', async (req, res, next) => {
+  try { return res.json({ success: true, data: await listPanelAdmins() }); }
+  catch (error) { return next(error); }
+});
+
+router.post('/admins', async (req, res, next) => {
+  try {
+    const parsed = z.object({
+      userId: z.string().regex(/^\\d{1,20}$/),
+      permissions: z.object({
+        view_sessions: z.boolean().optional(),
+        send_messages: z.boolean().optional()
+      }).optional().default({})
+    }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Data Admin tidak valid.', 400, 'ADMIN_VALIDATION_ERROR');
+    const data = await grantPanelAdmin({ ...parsed.data, grantedBy: req.noxridge.userId });
+    return res.status(201).json({ success: true, data });
+  } catch (error) { return next(error); }
+});
+
+router.patch('/admins/:userId', async (req, res, next) => {
+  try {
+    const parsed = z.object({
+      enabled: z.boolean().optional(),
+      permissions: z.object({
+        view_sessions: z.boolean().optional(),
+        send_messages: z.boolean().optional()
+      }).optional()
+    }).refine(value => value.enabled !== undefined || value.permissions !== undefined).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Perubahan Admin tidak valid.', 400, 'ADMIN_VALIDATION_ERROR');
+    const data = await updatePanelAdmin(req.params.userId, parsed.data);
+    return res.json({ success: true, data });
+  } catch (error) { return next(error); }
+});
+
+router.delete('/admins/:userId', async (req, res, next) => {
+  try { return res.json({ success: true, data: await revokePanelAdmin(req.params.userId) }); }
+  catch (error) { return next(error); }
 });
 
 export default router;
