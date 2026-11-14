@@ -71,7 +71,7 @@ export const setPlayerPanelKey = async (userId, rawKey, changedBy) => {
 
 export const verifyPlayerPanelAccess = async (userId) => {
   const id = String(userId ?? '');
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 401, 'PANEL_AUTH_INVALID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 401, 'PANEL_AUTH_INVALID');
   if (id === OWNER_USER_ID) return { authenticated: true, role: 'owner', permissions: { all: true } };
   const q = await ensureSchema();
   const result = await q.query(
