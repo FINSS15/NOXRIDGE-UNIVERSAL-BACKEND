@@ -127,7 +127,7 @@ router.delete('/blacklist/:userId', async (req, res, next) => {
 
 router.delete('/users/:userId', async (req, res, next) => {
   try {
-    if (!/^\\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+    if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
     const data = await removeWhitelistUser(req.params.userId);
     await deletePanelAccessForUser(req.params.userId);
     const sync = await syncLegacyWhitelist();
