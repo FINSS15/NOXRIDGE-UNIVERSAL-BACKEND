@@ -33,7 +33,7 @@ const allowedOrigins = env.CORS_ORIGIN
 
 app.use(cors({
   origin: allowedOrigins,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type', 'Authorization', 'x-api-key', 'x-master-key',
     'x-roblox-open-cloud-key', 'x-noxridge-user-id', 'x-noxridge-wl-key'
