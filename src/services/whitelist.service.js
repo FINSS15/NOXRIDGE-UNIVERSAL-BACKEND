@@ -385,7 +385,7 @@ export const addWhitelistUser = async ({ userId, username, trial, expires, wlKey
   // Existing players keep their individual trial unless the owner explicitly changes it.
   const client = await q.connect();
   const rawKey = String(wlKey ?? '').trim();
-  if (!/^\\d{4,32}$/.test(rawKey)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
+  if (!/^\d{4,32}$/.test(rawKey)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
   const keyHash = wlHash(rawKey).toLowerCase();
   const cleanName = String(username).trim().slice(0,64) || 'NOXRIDGE_USER';
   try {
@@ -425,8 +425,8 @@ export const addWhitelistUser = async ({ userId, username, trial, expires, wlKey
 export const updateWhitelistUserKey = async (userId, rawKey) => {
   const id = String(userId ?? '');
   const key = String(rawKey ?? '').trim();
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
-  if (!/^\\d{4,32}$/.test(key)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{4,32}$/.test(key)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
   const q = await schema();
   await ensureLegacyMigration(q);
   const keyHash = wlHash(key).toLowerCase();
