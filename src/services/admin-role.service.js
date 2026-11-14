@@ -23,7 +23,7 @@ const ensureSchema = async () => {
       ' user_id BIGINT PRIMARY KEY, panel_key_salt TEXT, panel_key_hash TEXT,' +
       " role VARCHAR(16) NOT NULL DEFAULT 'player' CHECK (role IN ('player','admin'))," +
       ' enabled BOOLEAN NOT NULL DEFAULT TRUE,' +
-      " permissions JSONB NOT NULL DEFAULT '{\\"view_sessions\\":false,\\"send_messages\\":false}'::jsonb," +
+      " permissions JSONB NOT NULL DEFAULT '{}'::jsonb," +
       ' created_by BIGINT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),' +
       ' CHECK ((panel_key_salt IS NULL AND panel_key_hash IS NULL) OR (panel_key_salt IS NOT NULL AND panel_key_hash IS NOT NULL))' +
       '); CREATE INDEX IF NOT EXISTS noxridge_panel_access_role_enabled ON noxridge_panel_access(role,enabled);'
@@ -36,13 +36,13 @@ const ensureSchema = async () => {
 const normalizePermissions = (value = {}) => Object.fromEntries(ADMIN_PERMISSIONS.map(key => [key, value?.[key] === true]));
 const validateUserId = (value) => {
   const id = String(value ?? '');
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   if (id === OWNER_USER_ID) throw new AppError('Owner tidak dapat diubah menjadi Admin.', 400, 'OWNER_ROLE_PROTECTED');
   return id;
 };
 const validatePanelKey = (value) => {
   const key = String(value ?? '').trim();
-  if (!/^\\d{4,32}$/.test(key)) throw new AppError('Panel Access Key harus berupa angka 4 sampai 32 digit.', 400, 'PANEL_KEY_INVALID');
+  if (!/^\d{4,32}$/.test(key)) throw new AppError('Panel Access Key harus berupa angka 4 sampai 32 digit.', 400, 'PANEL_KEY_INVALID');
   return key;
 };
 const hashPanelKey = async (key) => {
@@ -71,10 +71,10 @@ export const setPlayerPanelKey = async (userId, rawKey, changedBy) => {
 
 export const verifyPlayerPanelAccess = async (userId, rawKey) => {
   const id = String(userId ?? '');
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 401, 'PANEL_AUTH_INVALID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 401, 'PANEL_AUTH_INVALID');
   if (id === OWNER_USER_ID) return { authenticated: true, role: 'owner', permissions: { all: true } };
   const key = String(rawKey ?? '').trim();
-  if (!/^\\d{4,32}$/.test(key)) throw new AppError('Panel Access Key tidak valid.', 401, 'PANEL_KEY_INVALID');
+  if (!/^\d{4,32}$/.test(key)) throw new AppError('Panel Access Key tidak valid.', 401, 'PANEL_KEY_INVALID');
   const q = await ensureSchema();
   const result = await q.query(
     "SELECT p.panel_key_salt,p.panel_key_hash,p.role,p.enabled,p.permissions FROM noxridge_panel_access p " +
@@ -126,7 +126,7 @@ export const revokePanelAdmin = async (userId) => {
   const id = validateUserId(userId);
   const q = await ensureSchema();
   const result = await q.query(
-    "UPDATE noxridge_panel_access SET role='player',permissions='{\\"view_sessions\\":false,\\"send_messages\\":false}'::jsonb,enabled=FALSE,updated_at=NOW() WHERE user_id=$1 AND role='admin' RETURNING user_id",
+    "UPDATE noxridge_panel_access SET role='player',permissions='{}'::jsonb,enabled=FALSE,updated_at=NOW() WHERE user_id=$1 AND role='admin' RETURNING user_id",
     [id]
   );
   if (!result.rowCount) throw new AppError('Admin tidak ditemukan.', 404, 'ADMIN_NOT_FOUND');
