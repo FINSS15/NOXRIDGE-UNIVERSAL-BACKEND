@@ -138,7 +138,7 @@ router.put('/config', async (req, res, next) => {
 
 router.put('/users/:userId/panel-key', async (req, res, next) => {
   try {
-    const parsed = z.object({ panelKey: z.string().trim().min(4).max(32).regex(/^\\d+$/) }).safeParse(req.body);
+    const parsed = z.object({ panelKey: z.string().trim().min(4).max(32).regex(/^\d+$/) }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Panel Access Key harus berupa angka 4 sampai 32 digit.', 400, 'PANEL_KEY_INVALID');
     const data = await setPlayerPanelKey(req.params.userId, parsed.data.panelKey, req.noxridge.userId);
     return res.json({ success: true, data });
@@ -153,7 +153,7 @@ router.get('/admins', async (req, res, next) => {
 router.post('/admins', async (req, res, next) => {
   try {
     const parsed = z.object({
-      userId: z.string().regex(/^\\d{1,20}$/),
+      userId: z.string().regex(/^\d{1,20}$/),
       permissions: z.object({
         view_sessions: z.boolean().optional(),
         send_messages: z.boolean().optional()
