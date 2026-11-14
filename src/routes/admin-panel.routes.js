@@ -17,7 +17,7 @@ import {
 } from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
 import { syncLegacyWhitelistJson } from '../services/legacy-whitelist-sync.service.js';
-import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin } from '../services/admin-role.service.js';
+import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin, deletePanelAccessForUser } from '../services/admin-role.service.js';
 
 const syncLegacyWhitelist = async () => syncLegacyWhitelistJson(await getWhitelistLegacySnapshot());
 
@@ -127,8 +127,9 @@ router.delete('/blacklist/:userId', async (req, res, next) => {
 
 router.delete('/users/:userId', async (req, res, next) => {
   try {
-    if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+    if (!/^\\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
     const data = await removeWhitelistUser(req.params.userId);
+    await deletePanelAccessForUser(req.params.userId);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
