@@ -134,6 +134,31 @@ export const readImporterInbox = async ({ userId, sessionId }) => {
   } finally { client.release(); }
 };
 
+export const deleteUserPresenceAndMessages = async (userId) => {
+  const id = String(userId ?? '');
+  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  const q = await ensureSchema();
+  const client = await q.connect();
+  try {
+    await client.query('BEGIN');
+    const messages = await client.query(
+      'DELETE FROM noxridge_importer_messages WHERE recipient_user_id=$1 OR sender_user_id=$1',
+      [id]
+    );
+    const sessions = await client.query(
+      'DELETE FROM noxridge_importer_presence WHERE user_id=$1',
+      [id]
+    );
+    await client.query('COMMIT');
+    return { userId: id, messagesDeleted: messages.rowCount, sessionsDeleted: sessions.rowCount };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 export const closeImporterSession = async ({ userId, sessionId }) => {
   const q = await ensureSchema();
   await q.query('DELETE FROM noxridge_importer_presence WHERE user_id=$1 AND session_id=$2', [String(userId), sessionId]);
