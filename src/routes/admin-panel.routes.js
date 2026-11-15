@@ -19,6 +19,7 @@ import {
 import { AppError } from '../utils/errors.js';
 import { syncLegacyWhitelistJson } from '../services/legacy-whitelist-sync.service.js';
 import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin, deletePanelAccessForUser } from '../services/admin-role.service.js';
+import { deleteUserPresenceAndMessages } from '../services/presence-message.service.js';
 
 const syncLegacyWhitelist = async () => syncLegacyWhitelistJson(await getWhitelistLegacySnapshot());
 
@@ -129,11 +130,12 @@ router.delete('/blacklist/:userId', async (req, res, next) => {
 router.delete('/users/:userId', async (req, res, next) => {
   try {
     if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
-    // Revoke any panel role first so a failed cleanup cannot leave a stale Admin role.
-    await deletePanelAccessForUser(req.params.userId);
+    // Fail closed: remove panel access and live inbox state before permanent deletion.
+    const panelAccess = await deletePanelAccessForUser(req.params.userId);
+    const presence = await deleteUserPresenceAndMessages(req.params.userId);
     const data = await removeWhitelistUser(req.params.userId);
     const sync = await syncLegacyWhitelist();
-    return res.json({ success: true, data, sync });
+    return res.json({ success: true, data, panelAccess, presence, sync });
   } catch (error) { return next(error); }
 });
 
