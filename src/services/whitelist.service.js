@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { createHash, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errors.js';
+import { deleteObject } from './b2.service.js';
 
 const WL_URL = 'https://raw.githubusercontent.com/FINSS15/Last/refs/heads/main/whitelist.json';
 let pool, schemaPromise, cache;
@@ -487,8 +488,20 @@ export const removeWhitelistUser = async (userId) => {
   const q = await schema();
   await ensureLegacyMigration(q);
   const client = await q.connect();
+  let transactionStarted = false;
   try {
+    // Remove this player's private B2 archives before deleting their metadata.
+    // If B2 cleanup fails, keep the whitelist row so the owner can retry safely.
+    const storage = await client.query(
+      'SELECT object_key FROM noxridge_wl_storage_objects WHERE user_id=$1',
+      [id]
+    );
+    for (const row of storage.rows) {
+      await deleteObject(String(row.object_key));
+    }
+
     await client.query('BEGIN');
+    transactionStarted = true;
     const result = await client.query(
       'DELETE FROM noxridge_wl_entries WHERE user_id=$1 RETURNING user_id',
       [id]
@@ -497,11 +510,13 @@ export const removeWhitelistUser = async (userId) => {
     await client.query('DELETE FROM noxridge_wl_users WHERE user_id=$1', [id]);
     await client.query('DELETE FROM noxridge_wl_asset_operations WHERE user_id=$1', [id]);
     await client.query('DELETE FROM noxridge_wl_open_cloud_key_history WHERE user_id=$1', [id]);
+    await client.query('DELETE FROM noxridge_wl_storage_objects WHERE user_id=$1', [id]);
     await client.query('COMMIT');
+    transactionStarted = false;
     cache = undefined;
-    return { userId: id, deleted: true };
+    return { userId: id, deleted: true, storageObjectsDeleted: storage.rowCount };
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (transactionStarted) await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     client.release();
