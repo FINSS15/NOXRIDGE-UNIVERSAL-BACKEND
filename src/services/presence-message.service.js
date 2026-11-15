@@ -136,7 +136,7 @@ export const readImporterInbox = async ({ userId, sessionId }) => {
 
 export const deleteUserPresenceAndMessages = async (userId) => {
   const id = String(userId ?? '');
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   const q = await ensureSchema();
   const client = await q.connect();
   try {
