@@ -437,10 +437,10 @@ export const provisionWhitelistUser = async ({
   const rawKey = String(wlKey ?? '').trim();
   const cleanName = String(username ?? '').trim().slice(0, 64);
   const normalizedRole = String(role).toUpperCase();
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   if (id === '8172230031' && normalizedRole === 'ADMIN') throw new AppError('Owner tidak dapat diubah menjadi Admin.', 400, 'OWNER_ROLE_PROTECTED');
   if (!cleanName) throw new AppError('Username wajib diisi.', 400, 'USERNAME_REQUIRED');
-  if (!/^\\d{4,32}$/.test(rawKey)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
+  if (!/^\d{4,32}$/.test(rawKey)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
   if (!['PLAYER', 'ADMIN'].includes(normalizedRole)) throw new AppError('Role provisioning tidak valid.', 400, 'ROLE_INVALID');
   if (trial != null && trial !== '' && !validTrialDuration(String(trial))) {
     throw new AppError('Durasi trial tidak valid. Gunakan 1d, 12h, atau 7d.', 400, 'WL_TRIAL_INVALID');
