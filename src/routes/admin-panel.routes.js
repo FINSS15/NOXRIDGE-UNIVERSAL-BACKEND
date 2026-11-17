@@ -33,6 +33,19 @@ const requireOwner = (req, res, next) => {
   return next();
 };
 
+const assertManageablePlayerTarget = async (req, targetUserId) => {
+  const callerId = String(req.noxridge?.userId || '');
+  const targetId = String(targetUserId || '');
+  if (callerId === OWNER_USER_ID) return;
+  if (targetId === OWNER_USER_ID) {
+    throw new AppError('Akun Owner tidak dapat dikelola oleh Admin.', 403, 'OWNER_PLAYER_PROTECTED');
+  }
+  const admins = await listPanelAdmins();
+  if (admins.some(admin => String(admin.userId) === targetId)) {
+    throw new AppError('Akun Admin lain tidak dapat dikelola melalui Player Management.', 403, 'ADMIN_PLAYER_PROTECTED');
+  }
+};
+
 // Every request authenticates with the caller's own active Importer WL key.
 // Owner-only operations remain protected individually; player management can be delegated.
 router.use(requireWhitelist);
@@ -57,21 +70,21 @@ router.post('/users', requirePanelPermission('manage_players'), async (req, res,
       expires: z.string().trim().max(40).optional().nullable(),
       wlKey: z.string().trim().regex(/^\d{4,32}$/)
     }).safeParse(req.body);
-    if (!parsed.success) throw new AppError('Whitelist user data is invalid.', 400, 'VALIDATION_ERROR');
-    // Admins may create new whitelist entries, but cannot overwrite an existing player or the Owner.
+    if (!parsed.success) throw new AppError('Whitelist user data is invalid. WL key must be 4–32 digits.', 400, 'VALIDATION_ERROR');
+    // Admins may add new players only; they cannot overwrite existing entries or privileged accounts.
     if (String(req.noxridge?.userId || '') !== OWNER_USER_ID) {
       if (parsed.data.userId === OWNER_USER_ID) throw new AppError('Akun Owner tidak dapat dikelola oleh Admin.', 403, 'OWNER_PLAYER_PROTECTED');
       const current = await listWhitelistAdmin();
       if (current.users.some(user => String(user.userId) === parsed.data.userId)) {
         throw new AppError('Player sudah terdaftar. Admin hanya dapat menambahkan player baru.', 409, 'WL_USER_ALREADY_EXISTS');
       }
+      await assertManageablePlayerTarget(req, parsed.data.userId);
     }
     const data = await addWhitelistUser(parsed.data);
     const sync = await syncLegacyWhitelist();
     return res.status(201).json({ success: true, message: 'WL key hanya ditampilkan sekali. Simpan dengan aman.', data, sync });
   } catch (error) { return next(error); }
 });
-
 
 router.put('/users/:userId/wl-key', requireOwner, async (req, res, next) => {
   try {
@@ -89,7 +102,7 @@ router.put('/users/:userId/trial', requirePanelPermission('manage_players'), asy
       trial: z.string().trim().min(1).max(32).nullable()
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Durasi trial tidak valid.', 400, 'VALIDATION_ERROR');
-    if (String(req.noxridge?.userId || '') !== OWNER_USER_ID && req.params.userId === OWNER_USER_ID) throw new AppError('Akun Owner tidak dapat dikelola oleh Admin.', 403, 'OWNER_PLAYER_PROTECTED');
+    await assertManageablePlayerTarget(req, req.params.userId);
     const data = await updateWhitelistUserTrial(req.params.userId, parsed.data.trial);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
@@ -105,7 +118,7 @@ router.put('/users/:userId/permissions', requirePanelPermission('manage_players'
     if (!parsed.success) throw new AppError('Pengaturan izin fitur tidak valid.', 400, 'VALIDATION_ERROR');
     const unknown = Object.keys(parsed.data.features).filter(key => !WHITELIST_FEATURES.includes(key));
     if (unknown.length) throw new AppError('Ada nama fitur yang tidak dikenal.', 400, 'UNKNOWN_FEATURE');
-    if (String(req.noxridge?.userId || '') !== OWNER_USER_ID && req.params.userId === OWNER_USER_ID) throw new AppError('Akun Owner tidak dapat dikelola oleh Admin.', 403, 'OWNER_PLAYER_PROTECTED');
+    await assertManageablePlayerTarget(req, req.params.userId);
     const data = await updateWhitelistUserPermissions(req.params.userId, parsed.data);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
@@ -170,7 +183,6 @@ router.put('/config', requireOwner, async (req, res, next) => {
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
-
 
 router.get('/admins', requireOwner, async (req, res, next) => {
   try { return res.json({ success: true, data: await listPanelAdmins() }); }
