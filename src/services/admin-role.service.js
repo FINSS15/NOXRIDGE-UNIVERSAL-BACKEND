@@ -6,7 +6,7 @@ import { AppError } from '../utils/errors.js';
 
 const scrypt = promisify(scryptCallback);
 const OWNER_USER_ID = '8172230031';
-export const ADMIN_PERMISSIONS = ['view_sessions', 'send_messages'];
+export const ADMIN_PERMISSIONS = ['view_sessions', 'send_messages', 'manage_players'];
 let pool;
 let schemaPromise;
 
