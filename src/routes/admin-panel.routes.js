@@ -66,9 +66,9 @@ router.get('/users', requirePanelPermission('manage_players'), async (req, res, 
 router.post('/users/provision', requirePanelPermission('manage_players'), async (req, res, next) => {
   try {
     const parsed = z.object({
-      userId: z.string().regex(/^\\d{1,20}$/),
+      userId: z.string().regex(/^\d{1,20}$/),
       username: z.string().trim().min(1).max(64),
-      wlKey: z.string().trim().regex(/^\\d{4,32}$/),
+      wlKey: z.string().trim().regex(/^\d{4,32}$/),
       trial: z.string().trim().max(32).optional().nullable(),
       expires: z.string().trim().max(40).optional().nullable(),
       role: z.enum(['PLAYER', 'ADMIN']).default('PLAYER'),
