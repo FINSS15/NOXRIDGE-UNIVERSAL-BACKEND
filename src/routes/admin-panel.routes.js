@@ -7,6 +7,7 @@ import {
   addWhitelistUser,
   provisionWhitelistUser,
   updateWhitelistUserTrial,
+  updateWhitelistUserExpiry,
   updateWhitelistUserKey,
   removeWhitelistUser,
   revokeWhitelistUser,
@@ -132,6 +133,19 @@ router.put('/users/:userId/wl-key', requireOwner, async (req, res, next) => {
     const parsed = z.object({ wlKey: z.string().trim().regex(/^\d{4,32}$/) }).safeParse(req.body);
     if (!parsed.success) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
     const data = await updateWhitelistUserKey(req.params.userId, parsed.data.wlKey);
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
+  } catch (error) { return next(error); }
+});
+
+router.put('/users/:userId/expiry', requirePanelPermission('manage_players'), async (req, res, next) => {
+  try {
+    const parsed = z.object({
+      expires: z.string().trim().max(40).nullable()
+    }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Expiry WIB tidak valid.', 400, 'VALIDATION_ERROR');
+    await assertManageablePlayerTarget(req, req.params.userId);
+    const data = await updateWhitelistUserExpiry(req.params.userId, parsed.data.expires);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
