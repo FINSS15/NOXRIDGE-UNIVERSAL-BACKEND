@@ -566,7 +566,7 @@ export const updateWhitelistUserKey = async (userId, rawKey) => {
 
 export const updateWhitelistUserExpiry = async (userId, expires) => {
   const id = String(userId ?? '');
-  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   if (expires !== null && (typeof expires !== 'string' || !expiryWib(expires))) {
     throw new AppError('Format expiry tidak valid. Gunakan YYYY-MM-DD HH:MM WIB.', 400, 'WL_EXPIRY_INVALID');
   }
