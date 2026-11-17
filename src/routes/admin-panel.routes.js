@@ -5,6 +5,7 @@ import {
   listWhitelistAdmin,
   getWhitelistLegacySnapshot,
   addWhitelistUser,
+  provisionWhitelistUser,
   updateWhitelistUserTrial,
   updateWhitelistUserKey,
   removeWhitelistUser,
@@ -59,6 +60,46 @@ router.get('/session', requireOwner, (req, res) => res.json({
 router.get('/users', requirePanelPermission('manage_players'), async (req, res, next) => {
   try { return res.json({ success: true, data: await listWhitelistAdmin() }); }
   catch (error) { return next(error); }
+});
+
+
+router.post('/users/provision', requirePanelPermission('manage_players'), async (req, res, next) => {
+  try {
+    const parsed = z.object({
+      userId: z.string().regex(/^\\d{1,20}$/),
+      username: z.string().trim().min(1).max(64),
+      wlKey: z.string().trim().regex(/^\\d{4,32}$/),
+      trial: z.string().trim().max(32).optional().nullable(),
+      expires: z.string().trim().max(40).optional().nullable(),
+      role: z.enum(['PLAYER', 'ADMIN']).default('PLAYER'),
+      permissions: z.object({
+        mode: z.enum(['all', 'custom']),
+        features: z.record(z.string(), z.boolean()).default({})
+      }),
+      adminPermissions: z.object({
+        view_sessions: z.boolean().optional().default(false),
+        send_messages: z.boolean().optional().default(false),
+        manage_players: z.boolean().optional().default(false)
+      }).optional().default({})
+    }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Data provisioning tidak valid.', 400, 'PROVISION_VALIDATION_ERROR');
+    const unknown = Object.keys(parsed.data.permissions.features).filter(key => !WHITELIST_FEATURES.includes(key));
+    if (unknown.length) throw new AppError('Ada nama Player Feature yang tidak dikenal.', 400, 'UNKNOWN_FEATURE');
+    if (parsed.data.role === 'ADMIN' && String(req.noxridge?.userId || '') !== OWNER_USER_ID) {
+      throw new AppError('Hanya Owner yang dapat membuat Admin.', 403, 'ADMIN_OWNER_ONLY');
+    }
+    const data = await provisionWhitelistUser({
+      ...parsed.data,
+      grantedBy: req.noxridge.userId
+    });
+    const sync = await syncLegacyWhitelist();
+    return res.status(201).json({
+      success: true,
+      message: 'Provisioning berhasil. WL key hanya ditampilkan sekali; simpan dengan aman.',
+      data,
+      sync
+    });
+  } catch (error) { return next(error); }
 });
 
 router.post('/users', requirePanelPermission('manage_players'), async (req, res, next) => {
