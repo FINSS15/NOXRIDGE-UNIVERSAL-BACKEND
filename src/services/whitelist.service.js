@@ -423,6 +423,117 @@ export const addWhitelistUser = async ({ userId, username, trial, expires, wlKey
   } finally { client.release(); }
 };
 
+
+/**
+ * Atomic provisioning for a brand-new whitelist account and optional Admin role.
+ * Uses this service's PostgreSQL pool/client for every write so the whitelist,
+ * per-user key hash, feature permissions and Admin role commit or roll back together.
+ */
+export const provisionWhitelistUser = async ({
+  userId, username, trial, expires, wlKey, role = 'PLAYER',
+  permissions = {}, adminPermissions = {}, grantedBy
+}) => {
+  const id = String(userId ?? '');
+  const rawKey = String(wlKey ?? '').trim();
+  const cleanName = String(username ?? '').trim().slice(0, 64);
+  const normalizedRole = String(role).toUpperCase();
+  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (id === '8172230031' && normalizedRole === 'ADMIN') throw new AppError('Owner tidak dapat diubah menjadi Admin.', 400, 'OWNER_ROLE_PROTECTED');
+  if (!cleanName) throw new AppError('Username wajib diisi.', 400, 'USERNAME_REQUIRED');
+  if (!/^\\d{4,32}$/.test(rawKey)) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
+  if (!['PLAYER', 'ADMIN'].includes(normalizedRole)) throw new AppError('Role provisioning tidak valid.', 400, 'ROLE_INVALID');
+  if (trial != null && trial !== '' && !validTrialDuration(String(trial))) {
+    throw new AppError('Durasi trial tidak valid. Gunakan 1d, 12h, atau 7d.', 400, 'WL_TRIAL_INVALID');
+  }
+  if (expires != null && expires !== '' && !expiryWib(String(expires))) {
+    throw new AppError('Format expiry tidak valid. Gunakan YYYY-MM-DD HH:MM WIB.', 400, 'WL_EXPIRY_INVALID');
+  }
+
+  const mode = permissions?.mode === 'all' ? 'all' : 'custom';
+  const features = Object.fromEntries(WHITELIST_FEATURES.map(key => [
+    key, mode === 'all' ? true : permissions?.features?.[key] === true
+  ]));
+  if (mode === 'custom' && !Object.values(features).some(Boolean)) {
+    throw new AppError('Pilih minimal satu Player Feature Permission.', 400, 'WL_PERMISSION_REQUIRED');
+  }
+  const adminPerms = Object.fromEntries(['view_sessions', 'send_messages', 'manage_players'].map(key => [
+    key, adminPermissions?.[key] === true
+  ]));
+  if (normalizedRole === 'ADMIN' && !Object.values(adminPerms).some(Boolean)) {
+    throw new AppError('Pilih minimal satu Admin Panel Permission.', 400, 'ADMIN_PERMISSION_REQUIRED');
+  }
+
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  // Ensure the existing Admin role table is available before opening our transaction.
+  await q.query(
+    "CREATE TABLE IF NOT EXISTS noxridge_panel_access (" +
+    " user_id BIGINT PRIMARY KEY, panel_key_salt TEXT, panel_key_hash TEXT," +
+    " role VARCHAR(16) NOT NULL DEFAULT 'player' CHECK (role IN ('player','admin'))," +
+    " enabled BOOLEAN NOT NULL DEFAULT TRUE, permissions JSONB NOT NULL DEFAULT '{}'::jsonb," +
+    " created_by BIGINT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()," +
+    " CHECK ((panel_key_salt IS NULL AND panel_key_hash IS NULL) OR (panel_key_salt IS NOT NULL AND panel_key_hash IS NOT NULL))" +
+    ")"
+  );
+
+  const client = await q.connect();
+  const keyHash = wlHash(rawKey).toLowerCase();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query(
+      'SELECT user_id FROM noxridge_wl_entries WHERE user_id=$1 FOR UPDATE', [id]
+    );
+    if (existing.rowCount) throw new AppError('UserId sudah terdaftar. Data lama tidak diubah.', 409, 'WL_USER_ALREADY_EXISTS');
+    const banned = await client.query('SELECT 1 FROM noxridge_wl_blacklist WHERE user_id=$1', [id]);
+    if (banned.rowCount) throw new AppError('UserId berada di blacklist dan tidak dapat diprovision.', 409, 'WL_USER_BLACKLISTED');
+
+    let effectiveTrial = trial === undefined ? null : (trial || null);
+    if (trial === undefined) {
+      const setting = await client.query("SELECT value FROM noxridge_wl_settings WHERE setting_key='global_trial'");
+      const globalTrial = setting.rows[0]?.value || { status: 'off' };
+      const globalDuration = globalTrial.status === 'on' ? String(globalTrial.duration || '') : '';
+      if (globalDuration && validTrialDuration(globalDuration)) effectiveTrial = globalDuration;
+    }
+
+    await client.query(
+      `INSERT INTO noxridge_wl_entries(user_id,username,key_hash,trial,expires,active,permissions)
+       VALUES($1,$2,$3,$4,$5,TRUE,$6::jsonb)`,
+      [id, cleanName, keyHash, effectiveTrial, expires || null, JSON.stringify({ mode, features })]
+    );
+    await client.query(
+      `INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at)
+       VALUES($1,$2,NULL)
+       ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,updated_at=NOW()`,
+      [id, keyHash]
+    );
+
+    if (normalizedRole === 'ADMIN') {
+      const panelExisting = await client.query('SELECT 1 FROM noxridge_panel_access WHERE user_id=$1 FOR UPDATE', [id]);
+      if (panelExisting.rowCount) {
+        throw new AppError('Akun sudah memiliki record akses panel. Tidak ada data lama yang ditimpa.', 409, 'PANEL_ACCESS_ALREADY_EXISTS');
+      }
+      await client.query(
+        "INSERT INTO noxridge_panel_access(user_id,role,enabled,permissions,created_by) VALUES($1,'admin',TRUE,$2::jsonb,$3)",
+        [id, JSON.stringify(adminPerms), String(grantedBy || '8172230031')]
+      );
+    }
+
+    await client.query('COMMIT');
+    cache = undefined;
+    return {
+      userId: id, username: cleanName, wlKey: rawKey, trial: effectiveTrial,
+      expires: expires || null, role: normalizedRole,
+      permissions: { mode, features },
+      ...(normalizedRole === 'ADMIN' ? { adminPermissions: adminPerms } : {})
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 export const updateWhitelistUserKey = async (userId, rawKey) => {
   const id = String(userId ?? '');
   const key = String(rawKey ?? '').trim();
