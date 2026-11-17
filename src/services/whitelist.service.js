@@ -486,6 +486,12 @@ export const provisionWhitelistUser = async ({
     if (existing.rowCount) throw new AppError('UserId sudah terdaftar. Data lama tidak diubah.', 409, 'WL_USER_ALREADY_EXISTS');
     const banned = await client.query('SELECT 1 FROM noxridge_wl_blacklist WHERE user_id=$1', [id]);
     if (banned.rowCount) throw new AppError('UserId berada di blacklist dan tidak dapat diprovision.', 409, 'WL_USER_BLACKLISTED');
+    // Also reject orphaned/pre-existing panel records for BOTH roles. Otherwise a
+    // PLAYER provisioning could accidentally reactivate a stale Admin role.
+    const panelExisting = await client.query('SELECT role FROM noxridge_panel_access WHERE user_id=$1 FOR UPDATE', [id]);
+    if (panelExisting.rowCount) {
+      throw new AppError('Akun sudah memiliki record akses panel. Tidak ada data lama yang ditimpa.', 409, 'PANEL_ACCESS_ALREADY_EXISTS');
+    }
 
     let effectiveTrial = trial === undefined ? null : (trial || null);
     if (trial === undefined) {
@@ -508,10 +514,6 @@ export const provisionWhitelistUser = async ({
     );
 
     if (normalizedRole === 'ADMIN') {
-      const panelExisting = await client.query('SELECT 1 FROM noxridge_panel_access WHERE user_id=$1 FOR UPDATE', [id]);
-      if (panelExisting.rowCount) {
-        throw new AppError('Akun sudah memiliki record akses panel. Tidak ada data lama yang ditimpa.', 409, 'PANEL_ACCESS_ALREADY_EXISTS');
-      }
       await client.query(
         "INSERT INTO noxridge_panel_access(user_id,role,enabled,permissions,created_by) VALUES($1,'admin',TRUE,$2::jsonb,$3)",
         [id, JSON.stringify(adminPerms), String(grantedBy || '8172230031')]
