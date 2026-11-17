@@ -18,7 +18,7 @@ import {
 } from '../services/whitelist.service.js';
 import { AppError } from '../utils/errors.js';
 import { syncLegacyWhitelistJson } from '../services/legacy-whitelist-sync.service.js';
-import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin, deletePanelAccessForUser } from '../services/admin-role.service.js';
+import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin, deletePanelAccessForUser, requirePanelPermission } from '../services/admin-role.service.js';
 import { deleteUserPresenceAndMessages } from '../services/presence-message.service.js';
 
 const syncLegacyWhitelist = async () => syncLegacyWhitelistJson(await getWhitelistLegacySnapshot());
@@ -33,22 +33,22 @@ const requireOwner = (req, res, next) => {
   return next();
 };
 
-// Every request authenticates with the owner's existing Importer WL key.
-// Owner identity is verified server-side; MASTER_KEY is never sent to Lua.
-router.use(requireWhitelist, requireOwner);
+// Every request authenticates with the caller's own active Importer WL key.
+// Owner-only operations remain protected individually; player management can be delegated.
+router.use(requireWhitelist);
 
-router.get('/session', (req, res) => res.json({
+router.get('/session', requireOwner, (req, res) => res.json({
   success: true,
   authenticated: true,
   owner: { userId: req.noxridge.userId, username: req.noxridge.username }
 }));
 
-router.get('/users', async (req, res, next) => {
+router.get('/users', requirePanelPermission('manage_players'), async (req, res, next) => {
   try { return res.json({ success: true, data: await listWhitelistAdmin() }); }
   catch (error) { return next(error); }
 });
 
-router.post('/users', async (req, res, next) => {
+router.post('/users', requirePanelPermission('manage_players'), async (req, res, next) => {
   try {
     const parsed = z.object({
       userId: z.string().regex(/^\d{1,20}$/),
@@ -58,6 +58,14 @@ router.post('/users', async (req, res, next) => {
       wlKey: z.string().trim().regex(/^\d{4,32}$/)
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Whitelist user data is invalid.', 400, 'VALIDATION_ERROR');
+    // Admins may create new whitelist entries, but cannot overwrite an existing player or the Owner.
+    if (String(req.noxridge?.userId || '') !== OWNER_USER_ID) {
+      if (parsed.data.userId === OWNER_USER_ID) throw new AppError('Akun Owner tidak dapat dikelola oleh Admin.', 403, 'OWNER_PLAYER_PROTECTED');
+      const current = await listWhitelistAdmin();
+      if (current.users.some(user => String(user.userId) === parsed.data.userId)) {
+        throw new AppError('Player sudah terdaftar. Admin hanya dapat menambahkan player baru.', 409, 'WL_USER_ALREADY_EXISTS');
+      }
+    }
     const data = await addWhitelistUser(parsed.data);
     const sync = await syncLegacyWhitelist();
     return res.status(201).json({ success: true, message: 'WL key hanya ditampilkan sekali. Simpan dengan aman.', data, sync });
@@ -65,7 +73,7 @@ router.post('/users', async (req, res, next) => {
 });
 
 
-router.put('/users/:userId/wl-key', async (req, res, next) => {
+router.put('/users/:userId/wl-key', requireOwner, async (req, res, next) => {
   try {
     const parsed = z.object({ wlKey: z.string().trim().regex(/^\d{4,32}$/) }).safeParse(req.body);
     if (!parsed.success) throw new AppError('WL key harus berupa angka 4 sampai 32 digit.', 400, 'WL_KEY_INVALID');
@@ -75,19 +83,20 @@ router.put('/users/:userId/wl-key', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.put('/users/:userId/trial', async (req, res, next) => {
+router.put('/users/:userId/trial', requirePanelPermission('manage_players'), async (req, res, next) => {
   try {
     const parsed = z.object({
       trial: z.string().trim().min(1).max(32).nullable()
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Durasi trial tidak valid.', 400, 'VALIDATION_ERROR');
+    if (String(req.noxridge?.userId || '') !== OWNER_USER_ID && req.params.userId === OWNER_USER_ID) throw new AppError('Akun Owner tidak dapat dikelola oleh Admin.', 403, 'OWNER_PLAYER_PROTECTED');
     const data = await updateWhitelistUserTrial(req.params.userId, parsed.data.trial);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
 
-router.put('/users/:userId/permissions', async (req, res, next) => {
+router.put('/users/:userId/permissions', requirePanelPermission('manage_players'), async (req, res, next) => {
   try {
     const parsed = z.object({
       mode: z.enum(['all', 'custom']),
@@ -96,18 +105,19 @@ router.put('/users/:userId/permissions', async (req, res, next) => {
     if (!parsed.success) throw new AppError('Pengaturan izin fitur tidak valid.', 400, 'VALIDATION_ERROR');
     const unknown = Object.keys(parsed.data.features).filter(key => !WHITELIST_FEATURES.includes(key));
     if (unknown.length) throw new AppError('Ada nama fitur yang tidak dikenal.', 400, 'UNKNOWN_FEATURE');
+    if (String(req.noxridge?.userId || '') !== OWNER_USER_ID && req.params.userId === OWNER_USER_ID) throw new AppError('Akun Owner tidak dapat dikelola oleh Admin.', 403, 'OWNER_PLAYER_PROTECTED');
     const data = await updateWhitelistUserPermissions(req.params.userId, parsed.data);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
 });
 
-router.get('/blacklist', async (req, res, next) => {
+router.get('/blacklist', requireOwner, async (req, res, next) => {
   try { return res.json({ success: true, data: await listWhitelistBlacklist() }); }
   catch (error) { return next(error); }
 });
 
-router.post('/blacklist', async (req, res, next) => {
+router.post('/blacklist', requireOwner, async (req, res, next) => {
   try {
     const parsed = z.object({
       userId: z.string().regex(/^\d{1,20}$/),
@@ -122,12 +132,12 @@ router.post('/blacklist', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.delete('/blacklist/:userId', async (req, res, next) => {
+router.delete('/blacklist/:userId', requireOwner, async (req, res, next) => {
   try { const data = await removeWhitelistBlacklist(req.params.userId); const sync = await syncLegacyWhitelist(); return res.json({ success: true, data, sync }); }
   catch (error) { return next(error); }
 });
 
-router.delete('/users/:userId', async (req, res, next) => {
+router.delete('/users/:userId', requireOwner, async (req, res, next) => {
   try {
     if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
     // Fail closed: remove panel access and live inbox state before permanent deletion.
@@ -139,7 +149,7 @@ router.delete('/users/:userId', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.patch('/users/:userId/revoke', async (req, res, next) => {
+router.patch('/users/:userId/revoke', requireOwner, async (req, res, next) => {
   try {
     if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
     const data = await revokeWhitelistUser(req.params.userId);
@@ -148,7 +158,7 @@ router.patch('/users/:userId/revoke', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.put('/config', async (req, res, next) => {
+router.put('/config', requireOwner, async (req, res, next) => {
   try {
     const parsed = z.object({
       globalTrial: z.record(z.string(), z.unknown()).optional(),
@@ -162,18 +172,19 @@ router.put('/config', async (req, res, next) => {
 });
 
 
-router.get('/admins', async (req, res, next) => {
+router.get('/admins', requireOwner, async (req, res, next) => {
   try { return res.json({ success: true, data: await listPanelAdmins() }); }
   catch (error) { return next(error); }
 });
 
-router.post('/admins', async (req, res, next) => {
+router.post('/admins', requireOwner, async (req, res, next) => {
   try {
     const parsed = z.object({
       userId: z.string().regex(/^\d{1,20}$/),
       permissions: z.object({
         view_sessions: z.boolean().optional(),
-        send_messages: z.boolean().optional()
+        send_messages: z.boolean().optional(),
+        manage_players: z.boolean().optional()
       }).optional().default({})
     }).safeParse(req.body);
     if (!parsed.success) throw new AppError('Data Admin tidak valid.', 400, 'ADMIN_VALIDATION_ERROR');
@@ -182,13 +193,14 @@ router.post('/admins', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.patch('/admins/:userId', async (req, res, next) => {
+router.patch('/admins/:userId', requireOwner, async (req, res, next) => {
   try {
     const parsed = z.object({
       enabled: z.boolean().optional(),
       permissions: z.object({
         view_sessions: z.boolean().optional(),
-        send_messages: z.boolean().optional()
+        send_messages: z.boolean().optional(),
+        manage_players: z.boolean().optional()
       }).optional()
     }).refine(value => value.enabled !== undefined || value.permissions !== undefined).safeParse(req.body);
     if (!parsed.success) throw new AppError('Perubahan Admin tidak valid.', 400, 'ADMIN_VALIDATION_ERROR');
@@ -197,7 +209,7 @@ router.patch('/admins/:userId', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-router.delete('/admins/:userId', async (req, res, next) => {
+router.delete('/admins/:userId', requireOwner, async (req, res, next) => {
   try { return res.json({ success: true, data: await revokePanelAdmin(req.params.userId) }); }
   catch (error) { return next(error); }
 });
