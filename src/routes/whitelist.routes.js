@@ -36,12 +36,15 @@ router.get('/admin', requireMasterKey, async (req, res, next) => {
 router.post('/admin/users', requireMasterKey, async (req, res, next) => {
   try {
     const parsed = z.object({
-      userId: z.string().regex(/^\d{1,20}$/),
+      userId: z.string().regex(/^\\d{1,20}$/),
       username: z.string().trim().min(1).max(64),
+      // The Owner supplies the numeric Importer WL key, just like the Admin Panel.
+      // addWhitelistUser hashes it before persistence; the raw key is returned only once.
+      wlKey: z.string().trim().regex(/^\\d{4,32}$/),
       trial: z.string().trim().max(32).optional().nullable(),
       expires: z.string().trim().max(40).optional().nullable()
     }).safeParse(req.body);
-    if (!parsed.success) throw new AppError('Whitelist user data is invalid.', 400, 'VALIDATION_ERROR');
+    if (!parsed.success) throw new AppError('Whitelist user data is invalid. WL key must be 4–32 digits.', 400, 'VALIDATION_ERROR');
     const data = await addWhitelistUser(parsed.data);
     return res.status(201).json({
       success: true,
@@ -53,7 +56,7 @@ router.post('/admin/users', requireMasterKey, async (req, res, next) => {
 
 router.delete('/admin/users/:userId', requireMasterKey, async (req, res, next) => {
   try {
-    if (!/^\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
+    if (!/^\\d{1,20}$/.test(req.params.userId)) throw new AppError('Roblox UserId is invalid.', 400, 'INVALID_USER_ID');
     return res.json({ success: true, data: await removeWhitelistUser(req.params.userId) });
   } catch (error) { return next(error); }
 });
