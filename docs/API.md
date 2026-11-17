@@ -406,3 +406,46 @@ Required Render environment variables:
 - KEY_ENCRYPTION_SECRET (at least 32 characters)
 
 The existing WL credential is used as the proof of whitelist membership; it is not the Roblox API key. Never log or share either secret.
+
+13. Admin Panel Account Provisioning
+
+POST /admin-panel/users/provision
+
+Authenticates with the caller's active Importer whitelist identity:
+
+- x-noxridge-user-id
+- x-noxridge-wl-key
+
+The caller must have manage_players permission to provision PLAYER accounts. Only the configured Owner UserId may provision role ADMIN.
+
+Request body:
+
+```json
+{
+  "userId": "123456789",
+  "username": "RobloxUsername",
+  "wlKey": "123456",
+  "trial": "7d",
+  "expires": null,
+  "role": "ADMIN",
+  "permissions": {
+    "mode": "custom",
+    "features": {
+      "image_upload": true,
+      "music_upload": false
+    }
+  },
+  "adminPermissions": {
+    "view_sessions": true,
+    "send_messages": false,
+    "manage_players": false
+  }
+}
+```
+
+For role PLAYER, use `"role": "PLAYER"`; the adminPermissions object is ignored. The permissions object stores Player Feature Permissions and is separate from Admin Panel Permissions.
+
+Provisioning is performed in one PostgreSQL transaction. A new whitelist record, key hash, feature permissions, and optional Admin role are committed together or rolled back together. Existing whitelist or panel-access records and blacklisted UserIds are rejected with HTTP 409; existing records are never overwritten by this endpoint.
+
+The raw WL key is returned once in the successful response so the Owner can share it with the player. Store it securely; the database stores its existing compatibility hash, not the raw key.
+
