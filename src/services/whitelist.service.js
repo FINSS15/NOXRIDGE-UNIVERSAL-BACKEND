@@ -484,6 +484,11 @@ export const provisionWhitelistUser = async ({
       'SELECT user_id FROM noxridge_wl_entries WHERE user_id=$1 FOR UPDATE', [id]
     );
     if (existing.rowCount) throw new AppError('UserId sudah terdaftar. Data lama tidak diubah.', 409, 'WL_USER_ALREADY_EXISTS');
+    // Protect orphaned key-vault rows too; never overwrite a previously stored key.
+    const existingKey = await client.query('SELECT user_id FROM noxridge_wl_users WHERE user_id=$1 FOR UPDATE', [id]);
+    if (existingKey.rowCount) {
+      throw new AppError('UserId sudah memiliki record WL key. Data lama tidak diubah.', 409, 'WL_KEY_RECORD_ALREADY_EXISTS');
+    }
     const banned = await client.query('SELECT 1 FROM noxridge_wl_blacklist WHERE user_id=$1', [id]);
     if (banned.rowCount) throw new AppError('UserId berada di blacklist dan tidak dapat diprovision.', 409, 'WL_USER_BLACKLISTED');
     // Also reject orphaned/pre-existing panel records for BOTH roles. Otherwise a
@@ -508,8 +513,7 @@ export const provisionWhitelistUser = async ({
     );
     await client.query(
       `INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at)
-       VALUES($1,$2,NULL)
-       ON CONFLICT(user_id) DO UPDATE SET wl_key_hash=EXCLUDED.wl_key_hash,updated_at=NOW()`,
+       VALUES($1,$2,NULL)`,
       [id, keyHash]
     );
 
