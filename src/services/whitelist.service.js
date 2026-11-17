@@ -564,6 +564,28 @@ export const updateWhitelistUserKey = async (userId, rawKey) => {
   } finally { client.release(); }
 };
 
+export const updateWhitelistUserExpiry = async (userId, expires) => {
+  const id = String(userId ?? '');
+  if (!/^\\d{1,20}$/.test(id)) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (expires !== null && (typeof expires !== 'string' || !expiryWib(expires))) {
+    throw new AppError('Format expiry tidak valid. Gunakan YYYY-MM-DD HH:MM WIB.', 400, 'WL_EXPIRY_INVALID');
+  }
+  const q = await schema();
+  await ensureLegacyMigration(q);
+  const result = await q.query(
+    'UPDATE noxridge_wl_entries SET expires=$2,updated_at=NOW() WHERE user_id=$1 RETURNING user_id,username,expires,active',
+    [id, expires]
+  );
+  if (!result.rows[0]) throw new AppError('Whitelist user tidak ditemukan.', 404, 'WL_USER_NOT_FOUND');
+  cache = undefined;
+  return {
+    userId: String(result.rows[0].user_id),
+    username: result.rows[0].username,
+    expires: result.rows[0].expires,
+    active: result.rows[0].active
+  };
+};
+
 export const updateWhitelistUserTrial = async (userId, trial) => {
   const q = await schema();
   await ensureLegacyMigration(q);
