@@ -22,6 +22,8 @@ import { AppError } from '../utils/errors.js';
 import { syncLegacyWhitelistJson } from '../services/legacy-whitelist-sync.service.js';
 import { listPanelAdmins, grantPanelAdmin, updatePanelAdmin, revokePanelAdmin, deletePanelAccessForUser, requirePanelPermission } from '../services/admin-role.service.js';
 import { deleteUserPresenceAndMessages } from '../services/presence-message.service.js';
+import { auditAdminActivity } from '../middleware/admin-audit.js';
+import { listAdminActivity } from '../services/admin-audit.service.js';
 
 const syncLegacyWhitelist = async () => syncLegacyWhitelistJson(await getWhitelistLegacySnapshot());
 
@@ -51,12 +53,18 @@ const assertManageablePlayerTarget = async (req, targetUserId) => {
 // Every request authenticates with the caller's own active Importer WL key.
 // Owner-only operations remain protected individually; player management can be delegated.
 router.use(requireWhitelist);
+router.use(auditAdminActivity);
 
 router.get('/session', requireOwner, (req, res) => res.json({
   success: true,
   authenticated: true,
   owner: { userId: req.noxridge.userId, username: req.noxridge.username }
 }));
+
+router.get('/activity', requireOwner, async (req, res, next) => {
+  try { return res.json({ success: true, data: await listAdminActivity(150) }); }
+  catch (error) { return next(error); }
+});
 
 router.get('/users', requirePanelPermission('manage_players'), async (req, res, next) => {
   try { return res.json({ success: true, data: await listWhitelistAdmin() }); }
