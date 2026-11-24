@@ -4,9 +4,11 @@ import { requireWhitelist } from '../middleware/whitelistAuth.js';
 import { AppError } from '../utils/errors.js';
 import { requirePanelPermission } from '../services/admin-role.service.js';
 import { enqueueBroadcast, enqueuePrivateMessage, listActiveImporterSessions } from '../services/presence-message.service.js';
+import { auditAdminActivity } from '../middleware/admin-audit.js';
 
 const router = Router();
 router.use(requireWhitelist);
+router.use(auditAdminActivity);
 
 const messageSchema = z.object({
   title: z.string().trim().min(1).max(120),
