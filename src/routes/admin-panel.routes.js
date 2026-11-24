@@ -186,8 +186,20 @@ router.put('/users/:userId/trial', requirePanelPermission('manage_players'), asy
     if (!parsed.success) throw new AppError('Durasi trial tidak valid.', 400, 'VALIDATION_ERROR');
     await assertManageablePlayerTarget(req, req.params.userId);
     const data = await updateWhitelistUserTrial(req.params.userId, parsed.data.trial);
-    const sync = await syncLegacyWhitelist();
-    return res.json({ success: true, data, sync });
+    // PostgreSQL is the source of truth; report legacy mirror issues separately.
+    let sync;
+    try { sync = await syncLegacyWhitelist(); }
+    catch (error) {
+      sync = { synced: false, warning: 'Trial tersimpan di PostgreSQL, tetapi sinkronisasi whitelist lama gagal.' };
+    }
+    return res.json({
+      success: true,
+      message: sync.synced === false
+        ? 'Pengaturan trial tersimpan di PostgreSQL, tetapi sinkronisasi whitelist lama gagal.'
+        : 'Pengaturan trial berhasil disimpan.',
+      data,
+      sync
+    });
   } catch (error) { return next(error); }
 });
 
