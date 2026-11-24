@@ -102,11 +102,29 @@ router.post('/users/provision', requirePanelPermission('manage_players'), async 
       ...parsed.data,
       grantedBy: req.noxridge.userId
     });
+
+    // Confirm the committed PostgreSQL row is visible before reporting success.
+    // The legacy GitHub JSON file is a compatibility mirror, not the source of truth.
+    const verification = await listWhitelistAdmin();
+    const savedUser = verification.users.find(user => String(user.userId) === String(data.userId));
+    if (!savedUser) {
+      throw new AppError(
+        'Provisioning belum dapat diverifikasi di database. Periksa daftar player sebelum mencoba lagi.',
+        500,
+        'PROVISIONING_VERIFICATION_FAILED'
+      );
+    }
+
+    // A failed legacy mirror sync must not misreport a committed PostgreSQL
+    // provisioning transaction as failed. Return the sync status separately.
     const sync = await syncLegacyWhitelist();
     return res.status(201).json({
       success: true,
-      message: 'Provisioning berhasil. WL key hanya ditampilkan sekali; simpan dengan aman.',
+      message: sync.synced
+        ? 'Player berhasil disimpan dan diverifikasi di PostgreSQL.'
+        : 'Player berhasil disimpan dan diverifikasi di PostgreSQL, tetapi sinkronisasi whitelist lama belum berhasil.',
       data,
+      verification: { stored: true, userId: savedUser.userId },
       sync
     });
   } catch (error) { return next(error); }
