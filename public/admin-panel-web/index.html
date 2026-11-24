@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#080d1b">
+  <title>NOXRIDGE IMPERIAL — Admin Panel</title>
+  <link rel="stylesheet" href="/admin-panel-web/style.css">
+</head>
+<body>
+  <div class="backdrop"></div><div class="shade"></div>
+  <main id="loginView" class="login-wrap">
+    <section class="login-card">
+      <div class="crest">N</div>
+      <p class="eyebrow">NOXRIDGE COMMUNITY</p>
+      <h1>IMPERIAL <span>CONTROL</span></h1>
+      <p class="muted">Secure Admin Panel Access</p>
+      <form id="loginForm">
+        <label for="wlKey">WL KEY</label>
+        <input id="wlKey" name="wlKey" type="password" inputmode="numeric" autocomplete="current-password" maxlength="32" placeholder="Masukkan WL Key" required>
+        <button class="primary full" type="submit">ACCESS PANEL <span>↗</span></button>
+      </form>
+      <p id="loginError" class="error" role="alert"></p>
+      <p class="footnote">Protected by NOXRIDGE Universal Backend</p>
+    </section>
+  </main>
+
+  <div id="panelView" class="panel hidden">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">N</div><div><b>NOXRIDGE</b><small>IMPERIAL PANEL</small></div></div>
+      <div class="profile"><span class="online-dot"></span><div><b id="profileName">—</b><small id="profileRole">—</small></div></div>
+      <nav id="nav">
+        <button data-page="overview" class="nav-item active">◈ <span>Overview</span></button>
+        <button data-page="players" class="nav-item">♙ <span>Player Management</span></button>
+        <button data-page="sessions" class="nav-item" data-permission="view_sessions">◉ <span>Live Sessions</span></button>
+        <button data-page="messages" class="nav-item" data-permission="send_messages">✉ <span>Message Center</span></button>
+        <button data-page="admins" class="nav-item owner-only">♜ <span>Admin Roles</span></button>
+        <button data-page="blacklist" class="nav-item owner-only">⊘ <span>Blacklist</span></button>
+      </nav>
+      <div class="sidebar-bottom"><span class="secure-label">● SECURE CONNECTION</span><button id="logoutBtn" class="logout">↪ Sign out</button></div>
+    </aside>
+    <section class="workspace">
+      <header class="topbar"><div><p class="eyebrow">NOXRIDGE COMMUNITY / CONTROL CENTER</p><h2 id="pageTitle">Overview</h2></div><div class="top-right"><span id="roleChip" class="role-chip">OWNER</span><button id="mobileMenu" class="mobile-menu" aria-label="Toggle menu">☰</button></div></header>
+      <div id="content" class="content"></div>
+      <footer>NOXRIDGE IMPERIAL <span>•</span> Universal Backend</footer>
+    </section>
+  </div>
+
+  <dialog id="modal" class="modal"><form id="modalForm" method="dialog"><div class="modal-head"><div><p class="eyebrow">NOXRIDGE IMPERIAL</p><h3 id="modalTitle">Action</h3></div><button type="button" id="modalClose" class="icon-btn">×</button></div><div id="modalBody"></div><div class="modal-actions"><button type="button" class="ghost" id="modalCancel">Cancel</button><button type="submit" class="primary">Save Changes</button></div></form></dialog>
+  <div id="toast" class="toast"></div>
+  <script src="/admin-panel-web/app.js" defer></script>
+</body>
+</html>

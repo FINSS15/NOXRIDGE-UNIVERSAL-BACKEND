@@ -145,6 +145,16 @@ const expiryWib = (value) => {
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0) - 7, +(m[5] || 0)));
 };
 
+export const authenticateWhitelistByKey = async (rawKey) => {
+  const key = String(rawKey ?? '').trim();
+  if (!/^\d{4,32}$/.test(key)) throw new AppError('WL key tidak valid.', 401, 'WL_AUTH_INVALID');
+  const data = await getWhitelist();
+  const keyHash = wlHash(key).toLowerCase();
+  const matches = data.whitelist.filter(entry => String(entry?.key || '').toLowerCase() === keyHash);
+  if (matches.length !== 1) throw new AppError('WL key tidak terdaftar atau tidak valid.', 401, 'WL_ACCESS_DENIED');
+  return authenticateWhitelist(String(matches[0].id), key);
+};
+
 export const authenticateWhitelist = async (idInput, rawKey) => {
   const userId = String(idInput || '').trim();
   if (!/^\d{1,20}$/.test(userId) || !rawKey || String(rawKey).length > 256) throw new AppError('WL identity is invalid.', 401, 'WL_AUTH_INVALID');

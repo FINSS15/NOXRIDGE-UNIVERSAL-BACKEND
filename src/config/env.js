@@ -16,6 +16,7 @@ const envSchema = z.object({
   // Account database and encrypted user-key vault
   DATABASE_URL: z.string().url().optional(),
   KEY_ENCRYPTION_SECRET: z.string().min(32).optional(),
+  WEB_PANEL_SESSION_SECRET: z.string().min(32).optional(),
   TRIAL_DURATION_HOURS: z.coerce.number().int().min(1).max(8760).default(24),
 
   // Backblaze B2

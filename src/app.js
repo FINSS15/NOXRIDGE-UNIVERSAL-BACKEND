@@ -17,6 +17,7 @@ import adminPanelRoutes from './routes/admin-panel.routes.js';
 import presenceRoutes from './routes/presence.routes.js';
 import adminMessagesRoutes from './routes/admin-messages.routes.js';
 import adminPanelAuthRoutes from './routes/admin-panel-auth.routes.js';
+import adminPanelWebAuthRoutes, { requireWebPanelSession } from './routes/admin-panel-web-auth.routes.js';
 
 import { apiRateLimiter, uploadRateLimiter, presenceRateLimiter } from './middleware/rateLimit.js';
 import notFound from './middleware/notFound.js';
@@ -59,6 +60,10 @@ app.use('/whitelist', apiRateLimiter, whitelistRoutes);
 app.use('/admin-panel-auth', apiRateLimiter, adminPanelAuthRoutes);
 app.use('/admin-panel', apiRateLimiter, adminMessagesRoutes);
 app.use('/admin-panel', apiRateLimiter, adminPanelRoutes);
+app.use('/admin-panel-web/auth', apiRateLimiter, adminPanelWebAuthRoutes);
+app.use('/admin-panel-web/api', apiRateLimiter, requireWebPanelSession, adminMessagesRoutes);
+app.use('/admin-panel-web/api', apiRateLimiter, requireWebPanelSession, adminPanelRoutes);
+app.use('/admin-panel-web', express.static('public/admin-panel-web'));
 app.use('/presence', presenceRateLimiter, presenceRoutes);
 app.use('/assets', apiRateLimiter, assetsRoutes);
 app.use('/storage', uploadRateLimiter, storageRoutes);
