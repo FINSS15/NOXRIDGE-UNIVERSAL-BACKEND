@@ -1,6 +1,8 @@
 import { recordAdminActivity } from '../services/admin-audit.service.js';
 
 export const auditAdminActivity = (req, res, next) => {
+  if (req.adminActivityAuditAttached) return next();
+  req.adminActivityAuditAttached = true;
   const method = String(req.method || '').toUpperCase();
   if (!['POST','PUT','PATCH','DELETE'].includes(method)) return next();
   const originalJson = res.json.bind(res);
