@@ -449,3 +449,38 @@ Provisioning is performed in one PostgreSQL transaction. A new whitelist record,
 
 The raw WL key is returned once in the successful response so the Owner can share it with the player. Store it securely; the database stores its existing compatibility hash, not the raw key.
 
+
+
+---
+
+## NOXRIDGE IMPERIAL Web Admin Panel
+
+The Web Panel is served by the same backend at `/admin-panel-web`. It does not use a separate whitelist, trial, expiry, feature-permission, or Admin-role database.
+
+Before enabling Web Panel login, configure `WEB_PANEL_SESSION_SECRET` in Render with a unique random value of at least 32 characters. Keep this value private and do not place it in browser code.
+
+### Web authentication
+
+- `POST /admin-panel-web/auth/login` — body: `{ "wlKey": "123456" }`. The backend identifies the account from the existing WL-key hash; clients cannot submit a UserId or role.
+- `GET /admin-panel-web/auth/me` — returns the current authenticated Web Panel identity and role.
+- `POST /admin-panel-web/auth/logout` — clears the Web Panel session cookie.
+
+The session is carried in an encrypted, HttpOnly cookie with an eight-hour lifetime. Every Web Panel API request rechecks the current WL key, whitelist status, trial, expiry, blacklist and Admin role. Changing a player's WL key or revoking their access invalidates their Web Panel session on its next request.
+
+### Shared management APIs
+
+The routes below are the existing Admin Panel handlers mounted under `/admin-panel-web/api`. They read and write the same PostgreSQL records as the Roblox Admin Panel:
+
+- `GET /admin-panel-web/api/users`
+- `POST /admin-panel-web/api/users/provision`
+- `POST /admin-panel-web/api/users`
+- `PUT /admin-panel-web/api/users/:userId/trial`
+- `PUT /admin-panel-web/api/users/:userId/expiry`
+- `PUT /admin-panel-web/api/users/:userId/permissions`
+- `GET|POST|PATCH|DELETE /admin-panel-web/api/admins`
+- `GET /admin-panel-web/api/sessions`
+- `POST /admin-panel-web/api/messages/broadcast`
+- `POST /admin-panel-web/api/messages/private`
+- `GET|POST|DELETE /admin-panel-web/api/blacklist`
+
+All existing Owner-only and Admin permission checks remain in force. The Roblox Importer authentication headers and Lua files are not changed.
