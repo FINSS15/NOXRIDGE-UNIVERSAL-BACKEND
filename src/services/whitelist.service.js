@@ -147,7 +147,7 @@ const expiryWib = (value) => {
 
 export const authenticateWhitelistByKey = async (rawKey) => {
   const key = String(rawKey ?? '').trim();
-  if (!/^\\d{4,32}$/.test(key)) throw new AppError('WL key tidak valid.', 401, 'WL_AUTH_INVALID');
+  if (!/^\d{4,32}$/.test(key)) throw new AppError('WL key tidak valid.', 401, 'WL_AUTH_INVALID');
   const data = await getWhitelist();
   const keyHash = wlHash(key).toLowerCase();
   const matches = data.whitelist.filter(entry => String(entry?.key || '').toLowerCase() === keyHash);
