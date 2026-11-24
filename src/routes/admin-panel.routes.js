@@ -102,10 +102,21 @@ router.post('/users/provision', requirePanelPermission('manage_players'), async 
       ...parsed.data,
       grantedBy: req.noxridge.userId
     });
-    const sync = await syncLegacyWhitelist();
+    // PostgreSQL provisioning is already committed atomically by the service.
+    // A legacy JSON mirror failure must not turn a successful DB save into an
+    // apparent failed request that encourages duplicate retries.
+    let sync = { success: true };
+    try {
+      const result = await syncLegacyWhitelist();
+      sync = { success: true, result };
+    } catch (syncError) {
+      console.error('[ADMIN PANEL] Player saved to PostgreSQL but legacy whitelist sync failed:', syncError);
+      sync = { success: false, warning: 'Player tersimpan di PostgreSQL, tetapi sinkronisasi legacy whitelist gagal. Coba sinkronisasi ulang; jangan buat player yang sama lagi.' };
+    }
     return res.status(201).json({
       success: true,
-      message: 'Provisioning berhasil. WL key hanya ditampilkan sekali; simpan dengan aman.',
+      persisted: true,
+      message: 'Player berhasil disimpan ke PostgreSQL. WL key hanya ditampilkan sekali; simpan dengan aman.',
       data,
       sync
     });
