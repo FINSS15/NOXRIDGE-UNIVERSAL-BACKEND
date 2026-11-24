@@ -197,8 +197,21 @@ router.post('/users/:userId/trial-adjust', requirePanelPermission('manage_player
     if (!parsed.success) throw new AppError('Perubahan durasi trial tidak valid.', 400, 'WL_TRIAL_ADJUST_INVALID');
     await assertManageablePlayerTarget(req, req.params.userId);
     const data = await adjustWhitelistUserTrial(req.params.userId, parsed.data.deltaSeconds);
-    const sync = await syncLegacyWhitelist();
-    return res.json({ success: true, data, sync });
+    // PostgreSQL is the source of truth. A legacy mirror failure must not
+    // turn a committed trial adjustment into a misleading failed response.
+    let sync;
+    try { sync = await syncLegacyWhitelist(); }
+    catch (error) {
+      sync = { synced: false, warning: 'Trial tersimpan di PostgreSQL, tetapi sinkronisasi whitelist lama gagal.' };
+    }
+    return res.json({
+      success: true,
+      message: sync.synced === false
+        ? 'Durasi trial tersimpan di PostgreSQL, tetapi sinkronisasi whitelist lama gagal.'
+        : 'Durasi trial berhasil diperbarui.',
+      data,
+      sync
+    });
   } catch (error) { return next(error); }
 });
 
