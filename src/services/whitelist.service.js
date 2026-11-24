@@ -612,21 +612,53 @@ export const adjustWhitelistUserTrial = async (userId, deltaSeconds) => {
     const row = found.rows[0];
     if (!row) throw new AppError('Whitelist user tidak ditemukan.', 404, 'WL_USER_NOT_FOUND');
     const currentSeconds = duration(row.trial);
-    if (!currentSeconds || !row.trial_started_at) throw new AppError('Player belum memiliki trial aktif yang dapat disesuaikan.', 409, 'WL_TRIAL_NOT_ACTIVE');
-    const expiresAt = new Date(new Date(row.trial_started_at).getTime() + currentSeconds * 1000);
-    const remaining = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 1000));
-    const nextRemaining = remaining + delta;
-    if (nextRemaining < 1) throw new AppError('Pengurangan melebihi sisa trial. Gunakan pengaturan Trial untuk menghapus atau mengubah trial.', 400, 'WL_TRIAL_ADJUST_TOO_LARGE');
+    const startedAt = row.trial_started_at ? new Date(row.trial_started_at) : null;
+    let nextRemaining;
+    let nextStartedAt = startedAt;
+
+    if (!startedAt) {
+      // A configured trial may not have started yet (the player has not
+      // authenticated). Adjust its configured duration without starting it.
+      if (delta < 0 && !currentSeconds) {
+        throw new AppError('Player belum memiliki trial yang dapat dikurangi.', 409, 'WL_TRIAL_NOT_ACTIVE');
+      }
+      nextRemaining = (currentSeconds || 0) + delta;
+      if (nextRemaining < 1) {
+        throw new AppError('Pengurangan melebihi durasi trial. Gunakan pengaturan Trial untuk menghapus atau mengubah trial.', 400, 'WL_TRIAL_ADJUST_TOO_LARGE');
+      }
+    } else {
+      const expiresAt = currentSeconds
+        ? new Date(startedAt.getTime() + currentSeconds * 1000)
+        : null;
+      const remaining = expiresAt
+        ? Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 1000))
+        : 0;
+      nextRemaining = remaining + delta;
+      if (nextRemaining < 1) {
+        throw new AppError('Pengurangan melebihi sisa trial. Gunakan pengaturan Trial untuk menghapus atau mengubah trial.', 400, 'WL_TRIAL_ADJUST_TOO_LARGE');
+      }
+      // For a started/expired trial, reset the countdown from this adjustment.
+      nextStartedAt = new Date();
+    }
+
     const updated = await client.query(
       'UPDATE noxridge_wl_entries SET trial=$2,updated_at=NOW() WHERE user_id=$1 RETURNING user_id,username,trial',
       [String(userId), `${nextRemaining}s`]
     );
-    await client.query(
-      'INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at) SELECT user_id,key_hash,NOW() FROM noxridge_wl_entries WHERE user_id=$1 ON CONFLICT(user_id) DO UPDATE SET trial_started_at=NOW(),updated_at=NOW()',
-      [String(userId)]
-    );
+    if (nextStartedAt) {
+      await client.query(
+        'INSERT INTO noxridge_wl_users(user_id,wl_key_hash,trial_started_at) SELECT user_id,key_hash,$2 FROM noxridge_wl_entries WHERE user_id=$1 ON CONFLICT(user_id) DO UPDATE SET trial_started_at=$2,updated_at=NOW()',
+        [String(userId), nextStartedAt]
+      );
+    }
     await client.query('COMMIT'); cache = undefined;
-    return { userId:String(updated.rows[0].user_id), username:updated.rows[0].username, trial:updated.rows[0].trial, remainingSeconds:nextRemaining, trialStartedAt:new Date().toISOString() };
+    return {
+      userId: String(updated.rows[0].user_id),
+      username: updated.rows[0].username,
+      trial: updated.rows[0].trial,
+      remainingSeconds: nextRemaining,
+      trialStartedAt: nextStartedAt ? nextStartedAt.toISOString() : null
+    };
   } catch(error) { await client.query('ROLLBACK').catch(()=>{}); throw error; }
   finally { client.release(); }
 };
