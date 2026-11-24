@@ -7,6 +7,7 @@ import {
   addWhitelistUser,
   provisionWhitelistUser,
   updateWhitelistUserTrial,
+  adjustWhitelistUserTrial,
   updateWhitelistUserExpiry,
   updateWhitelistUserKey,
   removeWhitelistUser,
@@ -167,6 +168,17 @@ router.put('/users/:userId/trial', requirePanelPermission('manage_players'), asy
     if (!parsed.success) throw new AppError('Durasi trial tidak valid.', 400, 'VALIDATION_ERROR');
     await assertManageablePlayerTarget(req, req.params.userId);
     const data = await updateWhitelistUserTrial(req.params.userId, parsed.data.trial);
+    const sync = await syncLegacyWhitelist();
+    return res.json({ success: true, data, sync });
+  } catch (error) { return next(error); }
+});
+
+router.post('/users/:userId/trial-adjust', requirePanelPermission('manage_players'), async (req, res, next) => {
+  try {
+    const parsed = z.object({ deltaSeconds: z.number().int().refine(value => value !== 0 && Math.abs(value) <= 315360000) }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('Perubahan durasi trial tidak valid.', 400, 'WL_TRIAL_ADJUST_INVALID');
+    await assertManageablePlayerTarget(req, req.params.userId);
+    const data = await adjustWhitelistUserTrial(req.params.userId, parsed.data.deltaSeconds);
     const sync = await syncLegacyWhitelist();
     return res.json({ success: true, data, sync });
   } catch (error) { return next(error); }
