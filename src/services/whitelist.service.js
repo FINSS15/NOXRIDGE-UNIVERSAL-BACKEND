@@ -597,7 +597,7 @@ export const updateWhitelistUserExpiry = async (userId, expires) => {
 };
 
 export const adjustWhitelistUserTrial = async (userId, deltaSeconds) => {
-  if (!/^\\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
+  if (!/^\d{1,20}$/.test(String(userId))) throw new AppError('Roblox UserId tidak valid.', 400, 'INVALID_USER_ID');
   const delta = Number(deltaSeconds);
   if (!Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta) > 315360000) throw new AppError('Perubahan durasi tidak valid.', 400, 'WL_TRIAL_ADJUST_INVALID');
   const q = await schema(); await ensureLegacyMigration(q);
